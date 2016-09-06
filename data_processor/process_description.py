@@ -1,9 +1,7 @@
 
-import urllib
-import urllib2
 import json
 import os
-# from jsonrpc import ServerProxy, JsonRpc20, TransportTcpIp
+
 import jsonrpclib
 from string import punctuation
 from pprint import pprint
@@ -31,13 +29,16 @@ def split_one(params):
             continue
         text = ll[2][1:-4]
 
-        text = text.replace('\\\n', ' ').replace('\\', '')
-        rsp = json.loads(parser.parse(text))
+        text = text.replace('\\n', ' ').replace('\\r', ' ').replace('\\', ' ')
+        try:
+            rsp = json.loads(parser.parse(text))
 
-        sentences = []
-        for s in rsp['sentences']:
-            sentences.append(s['text'])
-        ret.append(('%s\t%s' % (ll[0], '\t'.join(sentences))).encode('utf8'))
+            sentences = []
+            for s in rsp['sentences']:
+                sentences.append(s['text'])
+            ret.append(('%s\t%s' % (ll[0], '\t'.join(sentences))).encode('utf8'))
+        except Exception as e:
+            print e
 
     fin.close()
     return ret
@@ -45,19 +46,20 @@ def split_one(params):
 
 def split_main(fn_in, fn_out):
     from multiprocessing import Pool
-    MAX_POOL_NUM = 16
+    MAX_POOL_NUM = 1
 
     num_line = 0
     with open(fn_in) as fin:
         for _ in fin:
             num_line += 1
-
-    chunk_size = 10000
+    print "There are %d lines to process." % num_line
+    chunk_size = 500
     parameters = []
     i = 0
     while i * chunk_size < num_line:
-        parameters.append((i, fn_in, i * chunk_size, min(num_line, i * (chunk_size + 1))))
+        parameters.append((i, fn_in, i * chunk_size, min(num_line, (i + 1) * chunk_size)))
         i += 1
+
     pool = Pool(MAX_POOL_NUM)
     ret_list = pool.imap_unordered(split_one, parameters)
     pool.close()
@@ -65,7 +67,7 @@ def split_main(fn_in, fn_out):
         for l in ret_list:
             for s in l:
                 print >> fout, s
-
+    pool.join()
 
 def local_split_description(fn_in, fn_out):
     parser = StanfordCoreNLP("stanford-corenlp-full-2015-01-29/", properties="default.properties", serving=False)
@@ -79,14 +81,17 @@ def local_split_description(fn_in, fn_out):
                     continue
                 text = ll[2][1:-4]
 
-                text = text.replace('\\\n', ' ').replace('\\', '')
-                rsp = json.loads(parser.parse(text))
+                text = text.replace('\\n', ' ').replace('\\r', ' ').replace('\\', ' ')
+                try:
+                    rsp = json.loads(parser.parse(text))
 
-                sentences = []
-                for s in rsp['sentences']:
-                    sentences.append(s['text'])
+                    sentences = []
+                    for s in rsp['sentences']:
+                        sentences.append(s['text'])
 
-                print >> fout, ('%s\t%s' % (ll[0], '\t'.join(sentences))).encode('utf8')
+                    print >> fout, ('%s\t%s' % (ll[0], '\t'.join(sentences))).encode('utf8')
+                except Exception as e:
+                    print e.message
 
 
 
