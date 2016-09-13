@@ -57,5 +57,5 @@ def save_type_to_leveldb(fn_type):
 if __name__ == '__main__':
     # save_description_to_leveldb('../data/description.sentences.large.clean')
     # save_name_to_leveldb('../data/nameInFb')
-    # save_notable_type_to_leveldb('../data/typeInType')
-    save_type_to_leveldb('../data/typeInType')
+    # save_notable_type_to_leveldb('../data/typeInFb')
+    save_type_to_leveldb('../data/typeInFb')

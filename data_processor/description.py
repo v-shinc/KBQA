@@ -172,22 +172,67 @@ def gen_word_list(fn_word_count, fn_word):
                     continue
                 print >> fout, ll[0].encode('utf8')
 
-def construct_descriptipn(fn_entity, fn_name, fn_type, fn_out):
+def construct_description(fn_entity_list,  fn_out):
     import leveldb
     description_db = leveldb.LevelDB('../db/description.db')
-    name_db = leveldb.LevelDB('../dadb')
-    with open(fn_entity) as fin:
-        for line in fin:
-            data = json.loads(line, encoding='utf8')
-            for e in data['neg']:
-                try:
-                    _ = db.Get(e)
+    name_db = leveldb.LevelDB('../db/name.db')
+    notable_type_db = leveldb.LevelDB('../db/notable_type.db')
+    type_db = leveldb.LevelDB('../db.type.db')
 
-                except KeyError as e:
+    def get_type(mid):
+        types = []
+        try:
+            tt = notable_type_db.Get(mid)
+            type_name = name_db.Get(tt)
+            types.append(type_name.decode('utf8'))
+        except KeyError:
+            pass
+        try:
+            t = type_db.Get(mid)
+            types.extend(t.decode('utf8').split('\t'))
+        except KeyError:
+            pass
+        return types
+    def get_name(mid):
+        try:
+            return name_db.Get(mid).decode('utf8')
+        except KeyError:
+            return ''
+    with open(fn_out, 'a') as fout:
+        for fn_entity in fn_entity_list:
+            with open(fn_entity) as fin:
+                for line in fin:
+                    data = json.loads(line, encoding='utf8')
+                    es = data['neg']
+                    if data['pos'] != '':
+                        es.append(data['pos'])
+                    for e in es:
+                        try:
+                            _ = description_db.Get(e)
 
-                    db.Put(e, )
+                        except KeyError:
+                            name = get_name(e)
+                            if name == '':
+                                continue
+                            else:
+                                types = get_type(e)
+                                if len(types) == 0:
+                                    continue
+                                else:
+                                    fake_description = []
 
+                                    for t in types:
+                                        fake_description.append('%s is %s' % (name, t))
+                                    fake_description = '\t'.join(fake_description).lower()
+                                    description_db.Put(e, fake_description.encode('utf8'))
+                                    print >> fout, ('%s\t%s' % (e, fake_description)).encode('utf8')
 
+def clean_leveldb_description():
+    import leveldb
+    description_db = leveldb.LevelDB('../db/description.db')
+    for mid, text in description_db.RangeIter(include_value=True):
+        if text == '':
+            description_db.Delete(mid)
 
 if __name__ == '__main__':
     # text = 'Holiday is a 2014 Action Romance Thriller film written by A.R. Murugadoss and directed by A.R. Murugadoss. Soldier is a 2006 Short Animation film directed and written by  David Peros Bonnot and Simon Bogojevic-Narath.'
@@ -204,3 +249,5 @@ if __name__ == '__main__':
     # count_word('../data/description.sentences.clean', '../data/description.word.count')
 
     # gen_word_list('../data/description.word.count', '../data/description.word')
+    # clean_leveldb_description()
+    construct_description(['../data/wq.entity.test'], '../data/description.sentence.fake') # '../data/entity.train',

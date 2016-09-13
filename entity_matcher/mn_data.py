@@ -51,10 +51,10 @@ def load_description(fn_in, converter):
                 ent2desc[ll[0]].append(indices)
     return ent2desc
 
+import leveldb
 class MNTrainData(object):
-    def __init__(self, fn_train, ent2desc, word_converter, sentence_len, num_sentence):
+    def __init__(self, fn_train, word_converter, sentence_len, num_sentence):
         self.wc = word_converter
-        self.ent2desc = ent2desc
 
         self.file = open(fn_train)
         self.cur_line = 0
@@ -65,7 +65,26 @@ class MNTrainData(object):
         self.PAD = self.wc.num_word
         self.sentence_len = sentence_len
         self.num_sentence = num_sentence
-        self.entities = self.ent2desc.keys()
+        self.db = leveldb.LevelDB('../db/description.db')
+        self.entities = []
+
+    def get_entities_from_db(self):
+        for key, _ in self.db:
+            self.entities.append(key)
+
+    def get_description(self, mid):
+        try:
+            description =  self.db.Get(mid)
+            ret = []
+            for s in description.decode('utf8').split('\t'):
+                s = self.wc.words2indices(s)
+                if len(s) < 3:
+                    continue
+                ret.append(s)
+            return ret
+        except KeyError:
+            return None
+
 
     def add_pad(self, indices_list, max_len):
         for i, l in enumerate(indices_list):
@@ -93,17 +112,19 @@ class MNTrainData(object):
             if len(ques) == 0:
                 continue
 
-            if data['pos'] not in self.ent2desc:
+            desc = self.get_description(data['pos'])
+            if not desc:
                 # print data['pos'], 'has no description'
                 continue
 
             questions.append(ques)
-            descriptions.append(self.ent2desc[data['pos']])
+            descriptions.append(ques)
             labels.append(1)
 
             num_neg = 0
             for neg in data['neg']:
-                if neg not in self.ent2desc:
+                desc = self.get_description(neg)
+                if not desc:
                     continue
                 questions.append(ques)
                 descriptions.append(self.ent2desc[neg])
