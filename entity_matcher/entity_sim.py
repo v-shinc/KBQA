@@ -68,7 +68,6 @@ class EntitySim(object):
         )
         return scores
 
-
     def fit(self, questions, descriptions, neg_descriptions):
         _, loss = self.session.run([self.train_op, self.loss],{
             self.questions: questions,
@@ -80,7 +79,7 @@ class EntitySim(object):
     def save(self, save_path):
         return self.saver.save(save_path)
 
-from data_helpers import WordConverter, TrainData, TestData, load_description
+from basic_data import WordConverter, TrainData, TestData, load_description
 def train(fn_train, fn_test, fn_word, fn_description, batch_size, num_epoch, embed_size, margin, model_name, load=False, lr=0.001):
     # Initialize data
     wc = WordConverter(fn_word)

@@ -20,12 +20,13 @@ def load_word_list(fn_word):
 class WordConverter(object):
     def __init__(self, fn_word):
         self.word2idx = load_word_list(fn_word)
+        print len(self.word2idx)
         self.idx2word = dict()
         for w, i in self.word2idx.iteritems():
             self.idx2word[i] = w
 
     def words2indices(self, words):
-        if isinstance(words, str):
+        if not isinstance(words, list):
             words = words.split()
         return [self.word2idx[w] for w in words if w in self.word2idx]
 
@@ -67,6 +68,7 @@ class TrainData(object):
 
     def add_pad(self, indices_list, max_len):
         for i, l in enumerate(indices_list):
+            indices_list[i] = indices_list[i][:max_len]
             indices_list[i] += [self.PAD] * (max_len - len(l))
 
     def next_batch(self, batch_size):
@@ -114,6 +116,7 @@ class TestData(object):
 
     def add_pad(self, indices_list, max_len):
         for i, l in enumerate(indices_list):
+            indices_list[i] = indices_list[i][:max_len]
             indices_list[i] += [self.PAD] * (max_len - len(l))
 
     def __call__(self):
@@ -152,3 +155,6 @@ class TestData(object):
         average_rank = average_rank / num
         print "p@1 =", average_rank
         return average_rank
+
+
+
