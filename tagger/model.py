@@ -105,14 +105,19 @@ class DeepCRF(object):
 
     def recurrentNN(self, embedded_seq, rnn_dim, pos_ids):
         # embedded_seq: [batch_size, seq_dim, embed_dim]
-        # return: [batch_size, embed_dim]
+        # pos_ids: [batch_size]
+        # return: [batch_size, rnn_dim]
         seq_len = embedded_seq.get_shape()[1]
         embedded_list = [tf.squeeze(inp, [1]) for inp in tf.split(1, seq_len, embedded_seq)]
         cell = tf.nn.rnn_cell.GRUCell(rnn_dim)
         outputs, states = tf.nn.rnn(cell, embedded_list, dtype=tf.float32)
         outputs = tf.transpose(tf.pack(outputs), perm=[1, 0, 2])  # [batch_size, seq_dim, embed_dim]
         if pos_ids:
-            return tf.gather_nd(outputs, pos_ids)  # [batch_size, embed_dim]
+            batch_size = embedded_seq.get_shape()[0]
+            flattened_inputs = tf.reshape(embedded_seq, [-1, rnn_dim])
+            flattened_indices = tf.range(batch_size) * seq_dim + pos_ids
+            return tf.gather(flattened_inputs, flattened_indices)
+
         else:
             return outputs
 
