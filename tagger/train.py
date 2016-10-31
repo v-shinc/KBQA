@@ -1,16 +1,19 @@
 import os
 import json
 import sys
+import numpy as np
+from time import time
 from collections import OrderedDict
 from model import DeepCRF
 from data_helper import DataSet
 import tensorflow as tf
+from evaluate import evaluate
 
 tf.app.flags.DEFINE_string("fn_train", "", "Train set location.")
-tf.app.flags.DEFINE_string("fn_dev", "", "Name of directory to save model.")
+tf.app.flags.DEFINE_string("fn_dev", "", "Dev set location.")
 tf.app.flags.DEFINE_string("fn_word", "", "Word list location.")
 tf.app.flags.DEFINE_string("fn_char", "", "Character list location.")
-tf.app.flags.DEFINE_string("dir_name", "", "Dev set location.")
+tf.app.flags.DEFINE_string("dir_name", "", "Name of directory to save model.")
 tf.app.flags.DEFINE_int("max_seq_len", 20, "Max sentence length.")
 tf.app.flags.DEFINE_int("max_word_len", 10, "Max number of character in a word.")
 tf.app.flags.DEFINE_string("tag_scheme", "iobes", "Tagging scheme (IOB or IOBES).")
@@ -26,6 +29,7 @@ tf.app.flags.DEFINE_boolean("reload", False, "Reload the last saved model.")
 tf.app.flags.DEFINE_int("num_epoch", 50, "Number of training epoch.")
 tf.app.flags.DEFINE_int("batch_size", 50, "Batch size to use during training.")
 FLAGS = tf.app.flags.FLAGS
+
 
 if __name__ == '__main__':
 
@@ -73,15 +77,20 @@ if __name__ == '__main__':
     parameters['num_tag'] = dataset.num_tag
 
     model = DeepCRF(**parameters)
+    fout_log = open(log_path, 'a')
 
     with open(config_path, 'w') as fout:
         print >> fout, json.dumps(parameters)
 
-    lno = 0
-    total_loss = 0.
+    best_avg_f1 = 0.
+    if FLAGS.fn_dev:
+        accuracy, avg_precision, avg_recall, avg_f1, new_f1 = evaluate(dataset, model, FLAGS.fn_dev, dev_res_path)
+        best_avg_f1 = avg_f1
     for epoch_index in xrange(FLAGS.num_epoch):
-        iterator = dataset.batch_iterator(FLAGS.fn_train, FLAGS.batch_size)
-        for data in iterator:
+        tic = time()
+        lno = 0
+        total_loss = 0.
+        for data in dataset.batch_iterator(FLAGS.fn_train, FLAGS.batch_size):
             if lno % 1000 == 0:
                 sys.stdout.write("Process to %d\r" % lno)
                 sys.stdout.flush()
@@ -97,6 +106,24 @@ if __name__ == '__main__':
                 data['dropout_keep_prob']
             )
             total_loss += loss
+        info = '# %s: loss = %s, it costs %ss' % (epoch_index, total_loss, time() - tic)
+        print info
+        print >> fout_log, info
+
+        old_path = model.save("%s-%s" % (save_path, epoch_index))
+        if FLAGS.fn_dev:
+            accuracy, avg_precision, avg_recall, avg_f1, new_f1 = evaluate(dataset, model, FLAGS.fn_dev, dev_res_path)
+            if avg_f1 > best_avg_f1:
+                best_avg_f1 = avg_f1
+                os.rename(old_path, save_path)
+                os.rename('%s.meta' % old_path, '%s.meta' % save_path)
+                print "best mode", old_path
+
+
+
+
+
+
 
 
 

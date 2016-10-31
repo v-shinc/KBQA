@@ -31,13 +31,13 @@ def cap_feature(s):
     else:
         return 3
 
-tag_schema = {}
-tag_schema['IOB'] = ['I', 'O', 'B', 'START', 'END']
-tag_schema['IOBES'] = ['I', 'O', 'B', 'E', 'S', 'START', 'END']
+tag_scheme = {}
+tag_scheme['iob'] = ['I', 'O', 'B', 'START', 'END']
+tag_scheme['iobes'] = ['I', 'O', 'B', 'E', 'S', 'START', 'END']
 
-def load_tag_mapping(tag_schema_name):
-    tag_to_id = dict(zip(tag_schema[tag_schema_name], range(len(tag_schema[tag_schema_name]))))
-    id_to_tag = dict(zip(range(len(tag_schema[tag_schema_name]), tag_schema[tag_schema_name])))
+def load_tag_mapping(tag_scheme_name):
+    tag_to_id = dict(zip(tag_scheme[tag_scheme_name], range(len(tag_scheme[tag_scheme_name]))))
+    id_to_tag = dict(zip(range(len(tag_scheme[tag_scheme_name]), tag_scheme[tag_scheme_name])))
     return tag_to_id, id_to_tag
 
 class DataSet(object):
@@ -46,7 +46,8 @@ class DataSet(object):
         self.word_to_id, self.id_to_word = load_mapping(fn_word)
         if 'char_dim' in params:
             self.char_to_id, self.id_to_char = load_mapping(fn_char)
-        self.tag_to_id, self.id_to_tag = load_tag_mapping(params['tag_schema_name'])
+        self.tag_scheme_name = params['tag_scheme']
+        self.tag_to_id, self.id_to_tag = load_tag_mapping(params['tag_scheme_name'])
         self.char_padding = len(self.char_to_id)
         self.word_padding = len(self.word_to_id)
         self.max_word_len = params['max_word_len']
@@ -127,6 +128,28 @@ class DataSet(object):
                 "tag_ids": all_tags_ids
             }
         train_file.close()
+
+    def get_named_entity(self, sentence, tag_sequence):
+        entities = []
+        entity = []
+        sentence = [self.id_to_tag[i] for i in sentence]
+        tag_sequence = [self.id_to_tag[t] for t in tag_sequence]
+        if self.tag_scheme_name == "iobes":
+            for w, t in zip(sentence, tag_sequence):
+                if t == 'B' or t == 'O' or t == 'END' or t == 'S':
+                    if len(entity) > 0:
+                        entities.append(' '.join(entity))
+                        entity = []
+                if t == 'B' or t == 'I' or t == 'E' or t == 'S':
+                    entity.append(w)
+        else:
+            for w, t in zip(sentence, tag_sequence):
+                if t == 'B' or t == 'O' or t == 'END':
+                    if len(entity) > 0:
+                        entities.append(' '.join(entity))
+                if t == 'B' or t == 'I':
+                    entity.append(w)
+        return entities, sentence, tag_sequence
 
     def iob_to_iobes(self):
         pass
