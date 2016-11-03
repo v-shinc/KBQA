@@ -6,37 +6,40 @@ from time import time
 from collections import OrderedDict
 from model import DeepCRF
 from data_helper import DataSet
-import tensorflow as tf
 from evaluate import evaluate
+import tensorflow as tf
 
-tf.app.flags.DEFINE_string("fn_train", "", "Train set location.")
-tf.app.flags.DEFINE_string("fn_dev", "", "Dev set location.")
-tf.app.flags.DEFINE_string("fn_word", "", "Word list location.")
-tf.app.flags.DEFINE_string("fn_char", "", "Character list location.")
-tf.app.flags.DEFINE_string("dir_name", "", "Name of directory to save model.")
-tf.app.flags.DEFINE_int("max_seq_len", 20, "Max sentence length.")
-tf.app.flags.DEFINE_int("max_word_len", 10, "Max number of character in a word.")
-tf.app.flags.DEFINE_string("tag_scheme", "iobes", "Tagging scheme (IOB or IOBES).")
-tf.app.flags.DEFINE_int("char_dim", 25, "Character embedding dimension.")
-tf.app.flags.DEFINE_int("char_rnn_dim", 25, "Char RNN hidden layer size.")
-tf.app.flags.DEFINE_boolean("char_bidirect", False, "Use a bidirectional RNN for chars.")
-tf.app.flags.DEFINE_int("word_dim", 50, "Token embedding dimension.")
-tf.app.flags.DEFINE_int("word_rnn_dim", 50, "Token LSTM hidden layer size.")
-tf.app.flags.DEFINE_boolean("word_bidirect", False, "Use a bidirectional RNN for words.")
-tf.app.flags.DEFINE_int("cap_dim", 0, "Capitalization feature dimension (0 to disable).")
-tf.app.flags.DEFINE_float("dropout_keep_rate", 0.5, "Droupout keep rate on the input (1 = no dropout).")
-tf.app.flags.DEFINE_boolean("reload", False, "Reload the last saved model.")
-tf.app.flags.DEFINE_int("num_epoch", 50, "Number of training epoch.")
-tf.app.flags.DEFINE_int("batch_size", 50, "Batch size to use during training.")
-FLAGS = tf.app.flags.FLAGS
+flags = tf.flags
+flags.DEFINE_string("fn_train", "", "Train set location.")
+flags.DEFINE_string("fn_dev", "", "Dev set location.")
+flags.DEFINE_string("fn_word", "", "Word list location.")
+flags.DEFINE_string("fn_char", "", "Character list location.")
+flags.DEFINE_string("dir_name", "", "Name of directory to save model.")
+flags.DEFINE_integer("max_sentence_len", 36, "Max sentence length.")
+flags.DEFINE_integer("max_word_len", 22, "Max number of character in a word.")
+flags.DEFINE_string("tag_scheme", "iobes", "Tagging scheme (IOB or IOBES).")
+flags.DEFINE_integer("char_dim", 25, "Character embedding dimension.")
+flags.DEFINE_integer("char_rnn_dim", 25, "Char RNN hidden layer size.")
+flags.DEFINE_boolean("char_bidirect", True, "Use a bidirectional RNN for chars.")
+flags.DEFINE_integer("word_dim", 50, "Token embedding dimension.")
+flags.DEFINE_integer("word_rnn_dim", 50, "Token LSTM hidden layer size.")
+flags.DEFINE_boolean("word_bidirect", True, "Use a bidirectional RNN for words.")
+flags.DEFINE_integer("cap_dim", 1, "Capitalization feature dimension (0 to disable).")
+flags.DEFINE_float("dropout_keep_prob", 0.5, "Droupout keep rate on the input (1 = no dropout).")
+flags.DEFINE_boolean("reload", False, "Reload the last saved model.")
+flags.DEFINE_integer("num_epoch", 50, "Number of training epoch.")
+flags.DEFINE_integer("batch_size", 50, "Batch size to use during training.")
+FLAGS = flags.FLAGS
 
 
 if __name__ == '__main__':
-
+    print FLAGS.__dict__
+    for k, v in FLAGS.__dict__['__flags'].items():
+        print k, v
     # Check parameters validity
     assert FLAGS.fn_train and os.path.isfile(FLAGS.fn_train)
     assert FLAGS.char_dim > 0 or FLAGS.word_dim > 0
-    assert 0. <= FLAGS.dropout < 1.0
+    assert 0. <= FLAGS.dropout_keep_prob < 1.0
     assert FLAGS.tag_scheme in ['iob', 'iobes']
     assert FLAGS.dir_name
     assert FLAGS.num_epoch > 0
@@ -56,27 +59,42 @@ if __name__ == '__main__':
 
     # Parse parameter
     parameters = OrderedDict()
-    parameters['max_seq_len'] = FLAGS.max_seq_len
+    parameters['max_sentence_len'] = FLAGS.max_sentence_len
     parameters['max_word_len'] = FLAGS.max_word_len
     parameters['char_dim'] = FLAGS.char_dim
-    parameters['char_rnn_dim'] = FLAGS.char_lstm_dim
+    parameters['char_rnn_dim'] = FLAGS.char_rnn_dim
     parameters['char_bidirect'] = FLAGS.char_bidirect == 1
     parameters['word_dim'] = FLAGS.word_dim
-    parameters['word_rnn_dim'] = FLAGS.word_lstm_dim
+    parameters['word_rnn_dim'] = FLAGS.word_rnn_dim
     parameters['word_bidirect'] = FLAGS.word_bidirect == 1
     parameters['cap_dim'] = FLAGS.cap_dim
+    parameters['dropout_keep_prob'] = FLAGS.dropout_keep_prob
     if FLAGS.reload == 1:
         parameters['load_path'] = save_path
     else:
         parameters['load_path'] = None
-
+    parameters['tag_scheme'] = FLAGS.tag_scheme
     dataset = DataSet(FLAGS.fn_word, FLAGS.fn_char, parameters)
     parameters['num_word'] = dataset.num_word
     parameters['num_char'] = dataset.num_char
     parameters['num_cap'] = dataset.num_cap
     parameters['num_tag'] = dataset.num_tag
 
-    model = DeepCRF(**parameters)
+    model = DeepCRF(
+        FLAGS.max_sentence_len,
+        FLAGS.max_word_len,
+        FLAGS.char_dim,
+        FLAGS.char_rnn_dim,
+        FLAGS.char_bidirect == 1,
+        FLAGS.word_dim,
+        FLAGS.word_rnn_dim,
+        FLAGS.word_bidirect == 1,
+        FLAGS.cap_dim,
+        save_path if FLAGS.reload else None,
+        dataset.num_word,
+        dataset.num_char,
+        dataset.num_cap,
+        dataset.num_tag)
     fout_log = open(log_path, 'a')
 
     with open(config_path, 'w') as fout:
@@ -103,7 +121,7 @@ if __name__ == '__main__':
                 data['char_rev_ids'],
                 data['word_lengths'],
                 data['cap_ids'],
-                data['dropout_keep_prob']
+                FLAGS.dropout_keep_prob
             )
             total_loss += loss
         info = '# %s: loss = %s, it costs %ss' % (epoch_index, total_loss, time() - tic)
@@ -118,12 +136,4 @@ if __name__ == '__main__':
                 os.rename(old_path, save_path)
                 os.rename('%s.meta' % old_path, '%s.meta' % save_path)
                 print "best mode", old_path
-
-
-
-
-
-
-
-
 

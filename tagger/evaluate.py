@@ -43,7 +43,6 @@ def evaluate(dataset, model, fn_dev, fn_res):
             data['char_rev_ids'],
             data['word_lengths'],
             data['cap_ids'],
-            data['dropout_keep_prob']
         )
         for i in xrange(len(viterbi_sequences)):
             seq_len = data['sentence_lengths'][i]
@@ -53,9 +52,11 @@ def evaluate(dataset, model, fn_dev, fn_res):
             correct_labels += np.sum(np.equal(viterbi_sequence_, y_))
             total_labels += seq_len
             word_ids = data['word_ids'][i][:seq_len]
-            pred_entities, sentence, pred_tag_sequence = dataset.get_named_entity(word_ids, viterbi_sequence_, seq_len)
-            gold_entities, _, gold_tag_sequence = dataset.get_named_entity(word_ids, y_, seq_len)
+            pred_entities, sentence, pred_tag_sequence = dataset.get_named_entity(word_ids, viterbi_sequence_)
+            gold_entities, _, gold_tag_sequence = dataset.get_named_entity(word_ids, y_)
+            print gold_entities, pred_entities
             precision, recall, f1 = compute_f1(gold_entities, pred_entities)
+            print precision, recall, f1
             avg_precision += precision
             avg_recall += recall
             avg_f1 += f1
@@ -70,7 +71,10 @@ def evaluate(dataset, model, fn_dev, fn_res):
     avg_f1 /= num
     avg_precision /= num
     avg_recall /= num
-    new_f1 = 2 * avg_recall * avg_precision / (avg_recall + avg_precision)
+    if (avg_recall + avg_precision) == 0:
+        new_f1 = 0
+    else:
+        new_f1 = 2 * avg_recall * avg_precision / (avg_recall + avg_precision)
     res_info = ""
     res_info += "Word-level accuracy: %s\n" % accuracy
     res_info += "Average precision: %s\n" % avg_precision

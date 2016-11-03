@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import crf
 
 class DeepCRF(object):
     def __init__(self,
@@ -9,22 +9,21 @@ class DeepCRF(object):
                  char_rnn_dim,
                  char_bidirect,
                  word_dim,
-                 word_rnn_dim,
+                 rnn_dim,
                  word_bidirect,
                  cap_dim,
                  load_path,
                  num_word,
                  num_char,
                  num_cap,
-                 num_tag,
-                 **kwargs):
+                 num_tag):
         self.word_ids = tf.placeholder(tf.int32, [None, max_seq_len], name="word_ids")
-        self.seq_lengths = tf.placeholder(tf.int32, [None], name="seq_lengths") # number of valid words
+        self.seq_lengths = tf.placeholder(tf.int64, [None], name="seq_lengths") # number of valid words
         self.char_for_ids = tf.placeholder(tf.int32, [None, max_seq_len, max_word_len], name="char_for_ids")
         self.char_rev_ids = tf.placeholder(tf.int32, [None, max_seq_len, max_word_len], name="char_rev_ids")
         self.word_lengths = tf.placeholder(tf.int32, [None, max_seq_len], name="char_pos_ids")
-        self.tag_ids = tf.placeholder(tf.int32, [None, max_seq_len])
-        self.cap_ids = tf.placeholder(tf.int32, [None, max_seq_len])
+        self.tag_ids = tf.placeholder(tf.int32, [None, max_seq_len], name='tag_ids')
+        self.cap_ids = tf.placeholder(tf.int32, [None, max_seq_len], name='cap_ids')
         self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
         self.word_dim = word_dim
         self.char_dim = char_dim
@@ -33,68 +32,85 @@ class DeepCRF(object):
         initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
         inputs = []
         input_dim = 0
-        with tf.divice("/gpu:1"):
-            if word_dim:
-                word_embedding = tf.get_variable('word_embedding', [num_word, word_dim], initializer=initializer)
-                word_embedded = tf.nn.embedding_lookup(word_embedding, self.word_ids, name="word_layer")
-                inputs.append(word_embedded)
-                input_dim += word_dim
-            if char_dim:
-                char_embedding = tf.get_variable('char_embedding', [num_char, char_dim], initializer=initializer)
-                word_lengths = tf.reshape(self.word_lengths, [-1])
-                with tf.variable_scope('char_forward_rnn'):
+        # with tf.device("/gpu:1"):
+        if word_dim:
+            word_embedding = tf.get_variable('word_embedding', [num_word, word_dim], initializer=initializer)
+            word_embedded = tf.nn.embedding_lookup(word_embedding, self.word_ids, name="word_layer")
+            inputs.append(word_embedded)
+            print word_embedded.get_shape()
+            input_dim += word_dim
+        if char_dim:
+            char_embedding = tf.get_variable('char_embedding', [num_char, char_dim], initializer=initializer)
+            word_lengths = tf.reshape(self.word_lengths, [-1])
+            with tf.variable_scope('char_forward_rnn'):
 
-                    char_for_embedded = tf.reshape(
-                        tf.nn.embedding_lookup(char_embedding, self.char_for_ids),
+                char_for_embedded = tf.reshape(
+                    tf.nn.embedding_lookup(char_embedding, self.char_for_ids),
+                    [-1, max_word_len, char_dim]
+                )
+                char_for_state = self.rnn(char_for_embedded, char_rnn_dim, word_lengths)
+                char_for_out = tf.reshape(char_for_state, [-1, max_seq_len, char_rnn_dim])
+                print char_for_out.get_shape()
+                inputs.append(char_for_out)
+                input_dim += char_rnn_dim
+            if char_bidirect:
+                with tf.variable_scope('char_backward_rnn'):
+                    char_rev_embedded = tf.reshape(
+                        tf.nn.embedding_lookup(char_embedding, self.char_rev_ids),
                         [-1, max_word_len, char_dim]
                     )
-                    char_for_state = self.rnn(char_for_embedded, char_rnn_dim, word_lengths)
-                    char_for_out = tf.reshape(char_for_state, [-1, max_seq_len, char_rnn_dim])
-                    inputs.append(char_for_out)
+                    char_rev_state = self.rnn(char_rev_embedded, char_rnn_dim, word_lengths)
+                    char_rev_out = tf.reshape(char_rev_state, [-1, max_seq_len, char_rnn_dim])
+                    print char_rev_out.get_shape()
+                    inputs.append(char_rev_out)
                     input_dim += char_rnn_dim
-                if char_bidirect:
-                    with tf.variable_scope('char_backward_rnn'):
-                        char_rev_embedded = tf.reshape(
-                            tf.nn.embedding_lookup(char_embedding, self.char_rev_ids),
-                            [-1, max_word_len, char_dim]
-                        )
-                        char_rev_state = self.rnn(char_rev_embedded, char_rnn_dim, word_lengths)
-                        char_rev_out = tf.reshape(char_rev_state, [-1, max_seq_len, char_rnn_dim])
-                        inputs.append(char_rev_out)
-                        input_dim += char_rnn_dim
-            if cap_dim:
-                cap_embedding = tf.get_variable('cap_embedding', [num_cap, cap_dim], initializer=initializer)
-                cap_embedded = tf.nn.embedding_lookup(cap_embedding, cap_dim, name="cap_layer")
-                inputs.append(cap_embedded)
-                input_dim += cap_dim
+        if cap_dim:
+            cap_embedding = tf.get_variable('cap_embedding', [num_cap, cap_dim], initializer=initializer)
+            cap_embedded = tf.nn.embedding_lookup(cap_embedding, self.cap_ids, name="cap_layer")
+            inputs.append(cap_embedded)
+            print cap_embedded.get_shape()
+            input_dim += cap_dim
 
-            inputs = tf.concat(2, inputs)
+        inputs = tf.concat(2, inputs)
 
-            inputs = tf.nn.dropout(inputs, self.dropout_keep_prob)
+        inputs = tf.nn.dropout(inputs, self.dropout_keep_prob)
+        print inputs.get_shape()
+        with tf.variable_scope('forward_rnn'):
+            word_for_output = self.rnn(inputs, rnn_dim, None)
+            print word_for_output.get_shape()
+        if word_bidirect:
+            inputs_rev = tf.reverse_sequence(inputs, self.seq_lengths, seq_dim=1, batch_dim=None)
+            with tf.variable_scope('backward_rnn'):
+                word_rev_output = self.rnn(inputs_rev, rnn_dim, None)
+            word_rev_output = tf.reverse_sequence(word_rev_output, self.seq_lengths, seq_dim=1, batch_dim=None)
+            final_output = tf.concat(2, [word_for_output, word_rev_output])
+            final_output = self.hidden_layer(final_output, 2*rnn_dim, rnn_dim, "tanh_layer", initializer, activation=tf.tanh)
 
-            with tf.variable_scope('forward_rnn'):
-                word_for_output = self.rnn(inputs, word_rnn_dim, None)
-            if word_bidirect:
-                inputs_rev = tf.reverse_sequence(inputs, self.seq_lengths, seq_dim=1, batch_dim=None)
-                with tf.variable_scope('backward_rnn'):
-                    word_rev_output = self.rnn(inputs_rev, word_rnn_dim, None)
-                word_rev_output = tf.reverse_sequence(word_rev_output, self.seq_lengths, seq_dim=1, batch_dim=None)
-                final_output = tf.concat(2, [word_for_output, word_rev_output])
-                final_output = self.hidden_layer(final_output, 2*word_rnn_dim, word_rnn_dim, "tanh_layer", initializer, activation=tf.tanh)
-            else:
-                final_output = word_for_output
+            # w1 = tf.get_variable('w1', [2 * rnn_dim, rnn_dim], initializer=initializer)
+            # b1 = tf.get_variable('b1', [rnn_dim], initializer=tf.constant_initializer(0))
+            # final_output = tf.reshape(final_output, [-1, 2 * rnn_dim])
+            # final_output = tf.reshape(tf.tanh(tf.add(tf.matmul(final_output, w1), b1)), [-1, max_seq_len, rnn_dim])
+            print 'yyy', final_output.get_shape()
 
-            tags_scores = self.hidden_layer(final_output, word_rnn_dim, num_tag, 'final_layer', initializer, activation=None) # [batch_size, seq_dim, num_tags]
+        else:
+            final_output = word_for_output
 
-            # Compute the log-likelihood of the gold sequences and keep the transition
-            # params for inference at test time
-            log_likelihood, self.transitions, = tf.contrib.crf_log_likelihood(tags_scores, self.tag_ids, self.seq_lengths)
-            self.loss = tf.reduce_mean(-log_likelihood)
-            tvars = tf.trainable_variables()
-            max_grad_norm = 5
-            grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
-            optimizer = tf.train.AdamOptimizer(1e-3)
-            self.train_op = optimizer.apply_gradients(zip(grads, tvars))
+        self.tag_scores = self.hidden_layer(final_output, rnn_dim, num_tag, 'final_layer', initializer, activation=None) # [batch_size, seq_dim, num_tags]
+        # w2 = tf.get_variable('w2', [rnn_dim, num_tag], initializer=initializer)
+        # b2 = tf.get_variable('b2', [num_tag], initializer=tf.constant_initializer(0))
+        # flattened_final_output = tf.reshape(final_output, [-1, rnn_dim])
+        # self.tag_scores = tf.reshape(tf.add(tf.matmul(flattened_final_output, w2), b2), [-1, max_seq_len, num_tag])
+        print "xxx", self.tag_scores.get_shape()
+        # Compute the log-likelihood of the gold sequences and keep the transition
+        # params for inference at test time
+        self.transitions = tf.get_variable("transitions", [num_tag, num_tag])
+        log_likelihood, _ = crf.crf_log_likelihood(self.tag_scores, self.tag_ids, self.seq_lengths, self.transitions)
+        self.loss = tf.reduce_mean(-log_likelihood)
+        tvars = tf.trainable_variables()
+        max_grad_norm = 5
+        grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
+        optimizer = tf.train.AdamOptimizer(1e-3)
+        self.train_op = optimizer.apply_gradients(zip(grads, tvars))
 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -109,26 +125,34 @@ class DeepCRF(object):
 
     def hidden_layer(self, inputs, input_dim, out_dim, name, initializer, bias=True, activation=None):
         with tf.variable_scope(name):
-            w = tf.get_variable('w', [input_dim, out_dim], initializer)
-            b = tf.get_variable('b', [1], tf.constant_initializer(0))
-            linear_output = tf.matmul(inputs, w)
+            w = tf.get_variable('w', [input_dim, out_dim], initializer=initializer)
+            b = tf.get_variable('b', [1], initializer=tf.constant_initializer(0))
+
+            shape = inputs.get_shape().as_list()
+            if len(shape) > 2:
+                inputs = tf.reshape(inputs, [-1, input_dim])
+            outputs = tf.matmul(inputs, w, name="hidden_linear")
             if bias:
-                linear_output = tf.add(linear_output, b)
-            if not activation:
-                return linear_output
-            else:
-                return activation(linear_output)
+                outputs = tf.add(outputs, b)
+            if activation:
+                outputs = activation(outputs)
+            if len(shape) > 2:
+                shape[0] = -1
+                shape[-1] = out_dim
+                outputs = tf.reshape(outputs, shape)
+            return outputs
 
     def rnn(self, embedded_seq, rnn_dim, pos_ids):
         # embedded_seq: [batch_size, seq_dim, embed_dim]
         # pos_ids: [batch_size]
         # return: [batch_size, rnn_dim]
+
         # seq_len = embedded_seq.get_shape()[1]
         # embedded_list = [tf.squeeze(inp, [1]) for inp in tf.split(1, seq_len, embedded_seq)]
         # cell = tf.nn.rnn_cell.GRUCell(rnn_dim)
         # outputs, states = tf.nn.rnn(cell, embedded_list, dtype=tf.float32)
         # outputs = tf.transpose(tf.pack(outputs), perm=[1, 0, 2])  # [batch_size, seq_dim, embed_dim]
-        # if pos_ids: # dynamic_rnn is alternative
+        # if pos_ids!=None: # dynamic_rnn is alternative
         #     batch_size = embedded_seq.get_shape()[0]
         #     flattened_inputs = tf.reshape(embedded_seq, [-1, rnn_dim])
         #     flattened_indices = tf.range(batch_size) * seq_len + pos_ids
@@ -137,8 +161,9 @@ class DeepCRF(object):
         # else:
         #     return outputs
         cell = tf.nn.rnn_cell.GRUCell(rnn_dim)
-        outputs, state = tf.nn.dynamic_rnn(cell, inputs=embedded_seq, sequence_length=pos_ids)
-        if pos_ids:
+        print "[rnn embedded_seq]", embedded_seq.get_shape()
+        outputs, state = tf.nn.dynamic_rnn(cell, inputs=embedded_seq, sequence_length=pos_ids, dtype=embedded_seq.dtype)
+        if pos_ids != None:
             return state
         else:
             return outputs  # [batch_size, max_time, cell.output_size].
@@ -174,14 +199,14 @@ class DeepCRF(object):
             feed_dict[self.char_rev_ids] = char_rev_ids
         if self.cap_dim:
             feed_dict[self.cap_ids] = cap_ids
-        tag_scores, transitions = self.session.run([self.tag_ids, self.transitions], feed_dict)
+        tag_scores, transitions = self.session.run([self.tag_scores, self.transitions], feed_dict)
         batch_viterbi_sequence = []
         for tag_score_, seq_length_ in zip(tag_scores, seq_lengths):
             # Remove padding from scores and tag sequence.
             tag_score_ = tag_score_[:seq_length_]
 
             # Compute the highest scoring sequence.
-            viterbi_sequence, _ = tf.contrib.crf.viterbi_decode(tag_score_, transitions)
+            viterbi_sequence, _ = crf.viterbi_decode(tag_score_, transitions)
             batch_viterbi_sequence.append(viterbi_sequence)
         return batch_viterbi_sequence
 

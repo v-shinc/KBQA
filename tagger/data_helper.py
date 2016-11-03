@@ -6,13 +6,16 @@ def load_mapping(fn_word):
     index = 0
     word_to_id = dict()
     id_to_word = dict()
+    word_to_count = dict()
     with open(fn_word) as fin:
         for line in fin:
-            w = line.decode('utf8').strip()
+            w, cnt = line.decode('utf8').strip().split('\t')
             word_to_id[w] = index
             id_to_word[index] = w
+
+            word_to_count[w] = cnt
             index += 1
-    return word_to_id, id_to_word
+    return word_to_id, id_to_word, word_to_count
 
 def cap_feature(s):
     """
@@ -37,19 +40,36 @@ tag_scheme['iobes'] = ['I', 'O', 'B', 'E', 'S', 'START', 'END']
 
 def load_tag_mapping(tag_scheme_name):
     tag_to_id = dict(zip(tag_scheme[tag_scheme_name], range(len(tag_scheme[tag_scheme_name]))))
-    id_to_tag = dict(zip(range(len(tag_scheme[tag_scheme_name]), tag_scheme[tag_scheme_name])))
+    id_to_tag = dict(zip(range(len(tag_scheme[tag_scheme_name])), tag_scheme[tag_scheme_name]))
     return tag_to_id, id_to_tag
 
 class DataSet(object):
     def __init__(self, fn_word, fn_char, params):
 
-        self.word_to_id, self.id_to_word = load_mapping(fn_word)
+        self.word_to_id, self.id_to_word, self.word_to_count = load_mapping(fn_word)
+        if '<UNK>' not in self.word_to_id:
+            unknow_idx = len(self.word_to_id)
+            self.word_to_id['<UNK>'] = unknow_idx
+            self.id_to_word[unknow_idx] = '<UNK>'
+            self.word_to_count['<UNK>'] = 1000
+
+        if '<START>' not in self.word_to_id:
+            start_idx = len(self.word_to_id)
+            self.word_to_id['<START>'] = start_idx
+            self.id_to_word[start_idx] = '<START>'
+            self.word_to_count['<START>'] = 1000
+        if '<END>' not in self.word_to_id:
+            end_idx = len(self.word_to_id)
+            self.word_to_id['<END>'] = end_idx
+            self.id_to_word[end_idx] = '<END>'
+            self.word_to_count['<END>'] = 1000
         if 'char_dim' in params:
-            self.char_to_id, self.id_to_char = load_mapping(fn_char)
+            self.char_to_id, self.id_to_char, self.char_to_count = load_mapping(fn_char)
         self.tag_scheme_name = params['tag_scheme']
-        self.tag_to_id, self.id_to_tag = load_tag_mapping(params['tag_scheme_name'])
+        self.tag_to_id, self.id_to_tag = load_tag_mapping(self.tag_scheme_name)
         self.char_padding = len(self.char_to_id)
         self.word_padding = len(self.word_to_id)
+        self.tag_padding = self.tag_to_id['END']
         self.max_word_len = params['max_word_len']
         self.max_sentence_len = params['max_sentence_len']
         self.params = params
@@ -91,21 +111,24 @@ class DataSet(object):
                 index += 1
 
                 line = line.decode('utf8').strip().split('\t')
-                sentence = [w.split() for w in line]
-
+                sentence = [w.split() for w in line[:self.max_sentence_len]]
+                tags = [w[1] for w in sentence]
                 str_words = [w[0] for w in sentence]
-                all_sentence_lengths.append(len(str_words))
+
                 if self.params['word_dim']:
-                    word_ids = [self.word_to_id[w if w in self.word_to_id else '<UNK>']
+                    word_ids = [self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>']
                          for w in str_words]
                     if len(word_ids) == 0:
-                        continue
+                        raise ValueError('len(word_ids) == 0')
+                        # continue
                     all_word_ids.append(self.pad_word(word_ids))
 
+                all_sentence_lengths.append(len(str_words))
                 # Skip characters that are not in the training set
                 if self.params['char_dim']:
                     char_ids = [[self.char_to_id[c] for c in w if c in self.char_to_id]
                              for w in str_words]
+
                     char_for_ids, char_rev_ids, word_lengths = self.pad_chars(char_ids)
                     all_char_for_ids.append(char_for_ids)
                     all_char_rev_ids.append(char_rev_ids)
@@ -115,10 +138,11 @@ class DataSet(object):
                     cap_ids = [cap_feature(w) for w in str_words]
                     all_cap_ids.append(self.pad_cap(cap_ids))
 
-                tag_ids = [self.tag_to_id[w[-1]] for w in s]
+                tag_ids = self.pad_tag([self.tag_to_id[t] for t in tags])
+
                 all_tags_ids.append(tag_ids)
 
-            yield {
+            ret = {
                 "word_ids": all_word_ids,
                 "sentence_lengths": all_sentence_lengths,
                 "char_for_ids": all_char_for_ids,
@@ -127,12 +151,17 @@ class DataSet(object):
                 "cap_ids": all_cap_ids,
                 "tag_ids": all_tags_ids
             }
+            for k, v in ret.items():
+                ret[k] = np.array(v)
+            yield ret
         train_file.close()
+
 
     def get_named_entity(self, sentence, tag_sequence):
         entities = []
         entity = []
-        sentence = [self.id_to_tag[i] for i in sentence]
+        sentence = [self.id_to_word[i] for i in sentence]
+
         tag_sequence = [self.id_to_tag[t] for t in tag_sequence]
         if self.tag_scheme_name == "iobes":
             for w, t in zip(sentence, tag_sequence):
@@ -157,7 +186,7 @@ class DataSet(object):
     def iobes_to_iob(self):
         pass
 
-    def pad_chars(self, words):
+    def pad_chars(self, char_ids):
         """
             Pad the characters of the words in a sentence.
             Input:
@@ -167,12 +196,17 @@ class DataSet(object):
                 - padded list of lists of ints (where chars are reversed)
                 - list of ints corresponding to the index of the last character of each word
         """
-        if len(words) < self.max_sentence_len:
-            words += [[self.char_padding] * 1] * (self.max_sentence_len - len(words))
+
+        char_ids = char_ids[:self.max_sentence_len]
+
+        if len(char_ids) < self.max_sentence_len:
+            char_ids += [[self.char_padding] * 1] * (self.max_sentence_len - len(char_ids))
+
         char_for = []
         char_rev = []
         word_lengths = []
-        for w in words:
+        for w in char_ids:
+            w = w[:self.max_word_len]
             padding = [self.char_padding] * (self.max_word_len - len(w))
             char_for.append(w + padding)
             char_rev.append(w[::-1] + padding)
@@ -187,7 +221,11 @@ class DataSet(object):
         :param words: list of ints (list of word index)
         :return: padded sentence
         """
+        words = words[:self.max_sentence_len]
         return words + [self.word_padding] * (self.max_sentence_len - len(words))
 
+    def pad_tag(self, tags):
+        tags = tags[:self.max_sentence_len]
+        return tags + [self.tag_padding] * (self.max_sentence_len - len(tags))
 
 
