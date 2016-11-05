@@ -1,6 +1,9 @@
 import sys
+import os
 import numpy as np
-
+from data_helper import DataSet
+from model import DeepCRF
+import json
 def compute_f1(gold_set, predict_set):
     if not isinstance(gold_set, set):
         gold_set = set(gold_set)
@@ -23,7 +26,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
     lno = 0
     correct_labels = 0
     total_labels = 0
-    batch_size = 1
+    batch_size = 5
     avg_precision = 0.
     avg_recall = 0.
     avg_f1 = 0.
@@ -51,19 +54,21 @@ def evaluate(dataset, model, fn_dev, fn_res):
             # Evaluate word-level accuracy
             correct_labels += np.sum(np.equal(viterbi_sequence_, y_))
             total_labels += seq_len
-            word_ids = data['word_ids'][i][:seq_len]
-            pred_entities, sentence, pred_tag_sequence = dataset.get_named_entity(word_ids, viterbi_sequence_)
-            gold_entities, _, gold_tag_sequence = dataset.get_named_entity(word_ids, y_)
-            print gold_entities, pred_entities
+            # word_ids = data['word_ids'][i][:seq_len]
+            # pred_entities, sentence, pred_tag_sequence = dataset.get_named_entity_from_ids(word_ids, viterbi_sequence_)
+            # gold_entities, _, gold_tag_sequence = dataset.get_named_entity_from_ids(word_ids, y_)
+            words = data['words'][i][:seq_len]
+            pred_entities, pred_tag_sequence = dataset.get_named_entity_from_words(words, viterbi_sequence_)
+            gold_entities, gold_tag_sequence = dataset.get_named_entity_from_words(words, y_)
+
             precision, recall, f1 = compute_f1(gold_entities, pred_entities)
-            print precision, recall, f1
             avg_precision += precision
             avg_recall += recall
             avg_f1 += f1
             num += 1
             if res_file:
                 print >> res_file, (" ".join(["%s|%s|%s" % (w, p, g)for w, p, g in
-                                             zip(sentence, gold_tag_sequence, pred_tag_sequence)])).encode('utf8')
+                                             zip(words, gold_tag_sequence, pred_tag_sequence)])).encode('utf8')
                 print >> res_file, ("gold entities: %s" % " ".join(gold_entities)).encode('utf8')
                 print >> res_file, ("predicted entities: %s" % " ".join(pred_entities)).encode('utf8')
 
@@ -82,6 +87,39 @@ def evaluate(dataset, model, fn_dev, fn_res):
     res_info += "Average f1 score over all sentence: %s\n" % avg_f1
     res_info += "F1 of average recall and precision: %s\n" % new_f1
     if res_file:
-        print >> res_file
+        print >> res_file, res_info
     print res_info
-    return accuracy, avg_precision, avg_recall, avg_f1,new_f1
+    return accuracy, avg_precision, avg_recall, avg_f1,new_f1, res_info
+
+if __name__ == '__main__':
+    dir_path = sys.argv[1]
+    fn_dev = sys.argv[2]
+    if len(sys.argv) == 3:
+        res_name = 'test.res'
+    else:
+        res_name = sys.argv[3]
+    dir_path = os.path.abspath(dir_path)
+    checkpoint_dir = os.path.join(dir_path, "checkpoints")
+    save_path = os.path.join(checkpoint_dir, "model")
+
+    config_path = os.path.join(dir_path, 'config.json')
+    parameters = json.load(open(config_path))
+    dataset = DataSet(parameters['fn_word'], parameters['fn_char'], parameters)
+    model = DeepCRF(
+        parameters['max_sentence_len'],
+        parameters['max_word_len'],
+        parameters['char_dim'],
+        parameters['char_rnn_dim'],
+        parameters['char_bidirect'] == 1,
+        parameters['word_dim'],
+        parameters['word_rnn_dim'],
+        parameters['word_bidirect'] == 1,
+        parameters['cap_dim'],
+        save_path,
+        parameters['num_word'],
+        parameters['num_char'],
+        parameters['num_cap'],
+        parameters['num_tag']
+    )
+    fn_res = os.path.join(dir_path, res_name)
+    evaluate(dataset, model, fn_dev, fn_res)

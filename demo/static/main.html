@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+
+{% block title %}首页{% endblock %}
+
+{% block page_content %}
+
+    <div class="container">
+        <div class="row">
+        <div class="col-md-4"><h3 class="form-signin-heading">KBQA</h3></div>
+        </div>
+        <!--<div class="row">-->
+            <!--<div class="col-md-4"><span id=result>&nbsp;</span></div>-->
+        <!--</div>-->
+        <!--<nav class="navbar navbar-default">-->
+            <!--<div class="container-fluid">-->
+
+                <!--<div class="navbar-header">-->
+                    <!--<a class="navbar-brand" href="#">-->
+                        <!--搜索相关性-->
+                    <!--</a>-->
+                <!--</div>-->
+                <!--<div id="navbar">-->
+                    <!--<form class="navbar-form navbar-left">-->
+
+                        <!--<div class="form-group">-->
+                            <!--<input type="text" placeholder="Email" class="form-control" autofocus="autofocus">-->
+                        <!--</div>-->
+
+                        <!--<button type="submit" class="btn btn-success">-->
+                            <!--<span class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>-->
+                        <!--</button>-->
+                        <!--<button type="submit" class="btn btn-default">Query</button>-->
+                        <!--<button type="submit" class="btn btn-default">Title</button>-->
+                    <!--</form>-->
+                <!--</div>-->
+              <!--</div>-->
+        <!--</nav>-->
+
+        <form class="row">
+            <div class="form-group col-md-4">
+                <input id="input-text" class="form-control" placeholder="问题" required autofocus name=input-box>
+                <!--<input type="text" placeholder="Search" class="form-control" autofocus="autofocus" required name=input-box>-->
+            </div>
+
+            <button type="button" class="btn btn-success">
+                <span id="entity-mention" class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>
+            </button>
+            <span>&nbsp;</span>
+
+            <div class="btn-group" role="group" aria-label="...">
+                <button id="query-query" type="button" class="btn btn-default">Query</button>
+                <button id="title-title" type="button" class="btn btn-default">Title</button>
+            </div>
+        </form>
+
+        <!--<form class="form-signin">-->
+
+            <!--<div class="row">-->
+                <!--<div class="col-md-4"><h2 class="form-signin-heading">搜索相关性</h2></div>-->
+            <!--</div>-->
+            <!--<div class="row">-->
+                <!--<div class="col-md-4"><input id="input-text" class="form-control" placeholder="标题" required autofocus name=input-box></div>-->
+                <!--<div class="col-md-2"><button id="title-title" class="btn btn-info btn-sm btn-block"><span  aria-hidden="true">Title-Title</span></button></div>-->
+                <!--<div class="col-md-2"><button id="query-query" class="btn btn-default btn-sm btn-block"><span  aria-hidden="true"></span>Query-Query</button></div>-->
+                <!--<div class="col-md-2"><button id="query-title" class="btn btn-default btn-sm btn-block"><span  aria-hidden="true"></span>Query-Title</button></div>-->
+            <!--</div>-->
+            <div class="row">
+                <!--<div class="col-md-4"><span>&nbsp;</span></div>-->
+            </div>
+            <div>
+                <div class="panel panel-default">
+                    <!-- Default panel contents -->
+                    <div class="panel-heading" id="result-type">相似的标题</div>
+                    <!--<div class="panel-body">-->
+                        <!--<p>...</p>-->
+                    <!--</div>-->
+                    <!-- Table -->
+                    <table class="table">
+                        <thead><tr><td class="col-md-1">#</td><td class="col-md-10">实体词</td></thead>
+                        <tbody id="mention-list">
+                            <tr><td><small>1</small></td><td><small>xxx</small>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        <!--</form>-->
+
+    </div> <!-- /container -->
+    {% block scripts %}
+    <script type=text/javascript>
+        $(function() {
+            $('#title-title').bind('click', function() {
+                $.getJSON('/t/get_title_nns', {
+                    title: $('input[name="input-box"]').val(),
+                }, function(data) {
+                    $("#result-type").text('相似的标题')
+                    $("#title-list > tr").remove();
+                    <!--console.log(data)-->
+                    /*for( var i = 0, len = data.length; i < len; i++ ) {
+                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + data[i].title + '</td><td class="col-md-1">' + data[i].score +'</td></tr>';
+                        $($line).appendTo('#title-list');
+                    };*/
+                    $.each(data, function(i, val){
+                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val.title + '</td><td class="col-md-1">' + val.score +'</td></tr>';
+                        $($line).appendTo('#title-list');
+                    });
+                });
+                return false;
+            });
+
+            $('#query-query').bind('click', function() {
+                $.getJSON('/t/get_query_nns', {
+                    query: $('input[name="input-box"]').val(),
+                }, function(data) {
+                    $("#result-type").text('相似问题')
+                    $("#title-list > tr").remove();
+                    $.each(data, function(i, val){
+                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val.query + '</td><td class="col-md-1">' + val.score +'</td></tr>';
+                        $($line).appendTo('#title-list');
+                    });
+                });
+                return false;
+            });
+
+            $('#entity-mention').bind('click', function() {
+                $.getJSON('/get_entity_mention', {
+                    sentence: $('input[name="input-box"]').val(),
+                }, function(data) {
+                    $("#result-type").text('结果')
+                    $("#mention-list > tr").remove();
+                    $.each(data, function(i, val){
+                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val + '</td><td class="col-md-1">';
+                        $($line).appendTo('#mention-list');
+                    });
+                });
+                return false;
+            });
+        });
+
+    </script>
+    {{super()}}
+    {% endblock %}
+
+
+{% endblock %}

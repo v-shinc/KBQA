@@ -24,21 +24,18 @@ flags.DEFINE_boolean("char_bidirect", True, "Use a bidirectional RNN for chars."
 flags.DEFINE_integer("word_dim", 50, "Token embedding dimension.")
 flags.DEFINE_integer("word_rnn_dim", 50, "Token LSTM hidden layer size.")
 flags.DEFINE_boolean("word_bidirect", True, "Use a bidirectional RNN for words.")
-flags.DEFINE_integer("cap_dim", 1, "Capitalization feature dimension (0 to disable).")
+flags.DEFINE_integer("cap_dim", 0, "Capitalization feature dimension (0 to disable).")
 flags.DEFINE_float("dropout_keep_prob", 0.5, "Droupout keep rate on the input (1 = no dropout).")
 flags.DEFINE_boolean("reload", False, "Reload the last saved model.")
 flags.DEFINE_integer("num_epoch", 50, "Number of training epoch.")
-flags.DEFINE_integer("batch_size", 50, "Batch size to use during training.")
+flags.DEFINE_integer("batch_size", 100, "Batch size to use during training.")
 FLAGS = flags.FLAGS
 
 
 if __name__ == '__main__':
-    print FLAGS.__dict__
-    for k, v in FLAGS.__dict__['__flags'].items():
-        print k, v
     # Check parameters validity
     assert FLAGS.fn_train and os.path.isfile(FLAGS.fn_train)
-    assert FLAGS.char_dim > 0 or FLAGS.word_dim > 0
+    assert FLAGS.char_dim >= 0 or FLAGS.word_dim >= 0
     assert 0. <= FLAGS.dropout_keep_prob < 1.0
     assert FLAGS.tag_scheme in ['iob', 'iobes']
     assert FLAGS.dir_name
@@ -53,7 +50,7 @@ if __name__ == '__main__':
     save_path = os.path.join(checkpoint_dir, "model")
     dev_res_path = os.path.join(out_dir, 'dev.res')
     log_path = os.path.join(out_dir, 'train.log')
-    config_path = os.path.join(out_dir, FLAGS.dir_name + '_config.json')
+    config_path = os.path.join(out_dir, 'config.json')
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
 
@@ -79,7 +76,8 @@ if __name__ == '__main__':
     parameters['num_char'] = dataset.num_char
     parameters['num_cap'] = dataset.num_cap
     parameters['num_tag'] = dataset.num_tag
-
+    parameters['fn_word'] = os.path.abspath(os.path.join(os.path.curdir, FLAGS.fn_word))
+    parameters['fn_char'] = os.path.abspath(os.path.join(os.path.curdir, FLAGS.fn_char))
     model = DeepCRF(
         FLAGS.max_sentence_len,
         FLAGS.max_word_len,
@@ -102,7 +100,8 @@ if __name__ == '__main__':
 
     best_avg_f1 = 0.
     if FLAGS.fn_dev:
-        accuracy, avg_precision, avg_recall, avg_f1, new_f1 = evaluate(dataset, model, FLAGS.fn_dev, dev_res_path)
+        accuracy, avg_precision, avg_recall, avg_f1, new_f1, eval_info = evaluate(dataset, model, FLAGS.fn_dev, dev_res_path)
+        print >> fout_log, eval_info
         best_avg_f1 = avg_f1
     for epoch_index in xrange(FLAGS.num_epoch):
         tic = time()
@@ -130,10 +129,12 @@ if __name__ == '__main__':
 
         old_path = model.save("%s-%s" % (save_path, epoch_index))
         if FLAGS.fn_dev:
-            accuracy, avg_precision, avg_recall, avg_f1, new_f1 = evaluate(dataset, model, FLAGS.fn_dev, dev_res_path)
+            accuracy, avg_precision, avg_recall, avg_f1, new_f1, eval_info = evaluate(dataset, model, FLAGS.fn_dev, dev_res_path)
+            print >> fout_log, eval_info
             if avg_f1 > best_avg_f1:
                 best_avg_f1 = avg_f1
                 os.rename(old_path, save_path)
                 os.rename('%s.meta' % old_path, '%s.meta' % save_path)
                 print "best mode", old_path
+
 

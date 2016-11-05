@@ -32,85 +32,75 @@ class DeepCRF(object):
         initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
         inputs = []
         input_dim = 0
-        # with tf.device("/gpu:1"):
-        if word_dim:
-            word_embedding = tf.get_variable('word_embedding', [num_word, word_dim], initializer=initializer)
-            word_embedded = tf.nn.embedding_lookup(word_embedding, self.word_ids, name="word_layer")
-            inputs.append(word_embedded)
-            print word_embedded.get_shape()
-            input_dim += word_dim
-        if char_dim:
-            char_embedding = tf.get_variable('char_embedding', [num_char, char_dim], initializer=initializer)
-            word_lengths = tf.reshape(self.word_lengths, [-1])
-            with tf.variable_scope('char_forward_rnn'):
+        with tf.device("/gpu:1"):
+            if word_dim:
+                word_embedding = tf.get_variable('word_embedding', [num_word, word_dim], initializer=initializer)
+                word_embedded = tf.nn.embedding_lookup(word_embedding, self.word_ids, name="word_layer")
+                inputs.append(word_embedded)
+                print word_embedded.get_shape()
+                input_dim += word_dim
+            if char_dim:
+                char_embedding = tf.get_variable('char_embedding', [num_char, char_dim], initializer=initializer)
+                word_lengths = tf.reshape(self.word_lengths, [-1])
+                with tf.variable_scope('char_forward_rnn'):
 
-                char_for_embedded = tf.reshape(
-                    tf.nn.embedding_lookup(char_embedding, self.char_for_ids),
-                    [-1, max_word_len, char_dim]
-                )
-                char_for_state = self.rnn(char_for_embedded, char_rnn_dim, word_lengths)
-                char_for_out = tf.reshape(char_for_state, [-1, max_seq_len, char_rnn_dim])
-                print char_for_out.get_shape()
-                inputs.append(char_for_out)
-                input_dim += char_rnn_dim
-            if char_bidirect:
-                with tf.variable_scope('char_backward_rnn'):
-                    char_rev_embedded = tf.reshape(
-                        tf.nn.embedding_lookup(char_embedding, self.char_rev_ids),
+                    char_for_embedded = tf.reshape(
+                        tf.nn.embedding_lookup(char_embedding, self.char_for_ids),
                         [-1, max_word_len, char_dim]
                     )
-                    char_rev_state = self.rnn(char_rev_embedded, char_rnn_dim, word_lengths)
-                    char_rev_out = tf.reshape(char_rev_state, [-1, max_seq_len, char_rnn_dim])
-                    print char_rev_out.get_shape()
-                    inputs.append(char_rev_out)
+                    char_for_state = self.rnn(char_for_embedded, char_rnn_dim, word_lengths)
+                    char_for_out = tf.reshape(char_for_state, [-1, max_seq_len, char_rnn_dim])
+
+                    inputs.append(char_for_out)
                     input_dim += char_rnn_dim
-        if cap_dim:
-            cap_embedding = tf.get_variable('cap_embedding', [num_cap, cap_dim], initializer=initializer)
-            cap_embedded = tf.nn.embedding_lookup(cap_embedding, self.cap_ids, name="cap_layer")
-            inputs.append(cap_embedded)
-            print cap_embedded.get_shape()
-            input_dim += cap_dim
+                if char_bidirect:
+                    with tf.variable_scope('char_backward_rnn'):
+                        char_rev_embedded = tf.reshape(
+                            tf.nn.embedding_lookup(char_embedding, self.char_rev_ids),
+                            [-1, max_word_len, char_dim]
+                        )
+                        char_rev_state = self.rnn(char_rev_embedded, char_rnn_dim, word_lengths)
+                        char_rev_out = tf.reshape(char_rev_state, [-1, max_seq_len, char_rnn_dim])
 
-        inputs = tf.concat(2, inputs)
+                        inputs.append(char_rev_out)
+                        input_dim += char_rnn_dim
+            if cap_dim:
+                cap_embedding = tf.get_variable('cap_embedding', [num_cap, cap_dim], initializer=initializer)
+                cap_embedded = tf.nn.embedding_lookup(cap_embedding, self.cap_ids, name="cap_layer")
+                inputs.append(cap_embedded)
 
-        inputs = tf.nn.dropout(inputs, self.dropout_keep_prob)
-        print inputs.get_shape()
-        with tf.variable_scope('forward_rnn'):
-            word_for_output = self.rnn(inputs, rnn_dim, None)
-            print word_for_output.get_shape()
-        if word_bidirect:
-            inputs_rev = tf.reverse_sequence(inputs, self.seq_lengths, seq_dim=1, batch_dim=None)
-            with tf.variable_scope('backward_rnn'):
-                word_rev_output = self.rnn(inputs_rev, rnn_dim, None)
-            word_rev_output = tf.reverse_sequence(word_rev_output, self.seq_lengths, seq_dim=1, batch_dim=None)
-            final_output = tf.concat(2, [word_for_output, word_rev_output])
-            final_output = self.hidden_layer(final_output, 2*rnn_dim, rnn_dim, "tanh_layer", initializer, activation=tf.tanh)
+                input_dim += cap_dim
 
-            # w1 = tf.get_variable('w1', [2 * rnn_dim, rnn_dim], initializer=initializer)
-            # b1 = tf.get_variable('b1', [rnn_dim], initializer=tf.constant_initializer(0))
-            # final_output = tf.reshape(final_output, [-1, 2 * rnn_dim])
-            # final_output = tf.reshape(tf.tanh(tf.add(tf.matmul(final_output, w1), b1)), [-1, max_seq_len, rnn_dim])
-            print 'yyy', final_output.get_shape()
+            inputs = tf.concat(2, inputs)
 
-        else:
-            final_output = word_for_output
+            inputs = tf.nn.dropout(inputs, self.dropout_keep_prob)
 
-        self.tag_scores = self.hidden_layer(final_output, rnn_dim, num_tag, 'final_layer', initializer, activation=None) # [batch_size, seq_dim, num_tags]
-        # w2 = tf.get_variable('w2', [rnn_dim, num_tag], initializer=initializer)
-        # b2 = tf.get_variable('b2', [num_tag], initializer=tf.constant_initializer(0))
-        # flattened_final_output = tf.reshape(final_output, [-1, rnn_dim])
-        # self.tag_scores = tf.reshape(tf.add(tf.matmul(flattened_final_output, w2), b2), [-1, max_seq_len, num_tag])
-        print "xxx", self.tag_scores.get_shape()
-        # Compute the log-likelihood of the gold sequences and keep the transition
-        # params for inference at test time
-        self.transitions = tf.get_variable("transitions", [num_tag, num_tag])
-        log_likelihood, _ = crf.crf_log_likelihood(self.tag_scores, self.tag_ids, self.seq_lengths, self.transitions)
-        self.loss = tf.reduce_mean(-log_likelihood)
-        tvars = tf.trainable_variables()
-        max_grad_norm = 5
-        grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
-        optimizer = tf.train.AdamOptimizer(1e-3)
-        self.train_op = optimizer.apply_gradients(zip(grads, tvars))
+            with tf.variable_scope('forward_rnn'):
+                word_for_output = self.rnn(inputs, rnn_dim, None)
+
+            if word_bidirect:
+                inputs_rev = tf.reverse_sequence(inputs, self.seq_lengths, seq_dim=1, batch_dim=None)
+                with tf.variable_scope('backward_rnn'):
+                    word_rev_output = self.rnn(inputs_rev, rnn_dim, None)
+                word_rev_output = tf.reverse_sequence(word_rev_output, self.seq_lengths, seq_dim=1, batch_dim=None)
+                final_output = tf.concat(2, [word_for_output, word_rev_output])
+                final_output = self.hidden_layer(final_output, 2*rnn_dim, rnn_dim, "tanh_layer", initializer, activation=tf.tanh)
+
+            else:
+                final_output = word_for_output
+
+            self.tag_scores = self.hidden_layer(final_output, rnn_dim, num_tag, 'final_layer', initializer, activation=None) # [batch_size, seq_dim, num_tags]
+
+            # Compute the log-likelihood of the gold sequences and keep the transition
+            # params for inference at test time
+            self.transitions = tf.get_variable("transitions", [num_tag, num_tag])
+            log_likelihood, _ = crf.crf_log_likelihood(self.tag_scores, self.tag_ids, self.seq_lengths, self.transitions)
+            self.loss = tf.reduce_mean(-log_likelihood)
+            tvars = tf.trainable_variables()
+            max_grad_norm = 5
+            grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
+            optimizer = tf.train.AdamOptimizer(1e-3)
+            self.train_op = optimizer.apply_gradients(zip(grads, tvars))
 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -178,8 +168,8 @@ class DeepCRF(object):
         if self.char_dim:
             feed_dict[self.char_for_ids] = char_for_ids
             feed_dict[self.word_lengths] = word_lengths
-        if self.char_bidirect:
-            feed_dict[self.char_rev_ids] = char_rev_ids
+            if self.char_bidirect:
+                feed_dict[self.char_rev_ids] = char_rev_ids
         if self.cap_dim:
             feed_dict[self.cap_ids] = cap_ids
 
@@ -195,8 +185,8 @@ class DeepCRF(object):
         if self.char_dim:
             feed_dict[self.char_for_ids] = char_for_ids
             feed_dict[self.word_lengths] = word_lengths
-        if self.char_bidirect:
-            feed_dict[self.char_rev_ids] = char_rev_ids
+            if self.char_bidirect:
+                feed_dict[self.char_rev_ids] = char_rev_ids
         if self.cap_dim:
             feed_dict[self.cap_ids] = cap_ids
         tag_scores, transitions = self.session.run([self.tag_scores, self.transitions], feed_dict)

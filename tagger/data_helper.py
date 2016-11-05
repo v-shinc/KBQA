@@ -1,5 +1,6 @@
+#coding=utf8
 import numpy as np
-
+from utils import split_sentence, normalize_word
 # data format:  word1[space]tag1[tab]word2[space]tag2[tab]...
 
 def load_mapping(fn_word):
@@ -52,7 +53,6 @@ class DataSet(object):
             self.word_to_id['<UNK>'] = unknow_idx
             self.id_to_word[unknow_idx] = '<UNK>'
             self.word_to_count['<UNK>'] = 1000
-
         if '<START>' not in self.word_to_id:
             start_idx = len(self.word_to_id)
             self.word_to_id['<START>'] = start_idx
@@ -87,6 +87,53 @@ class DataSet(object):
     def num_tag(self):
         return len(self.tag_to_id)
 
+    def create_model_input(self, sentence):
+        if not sentence.startswith('<START>'):
+            sentence = '<START> ' + sentence + ' <END>'
+        str_words, normalized = split_sentence(sentence)
+
+        str_words = str_words[:self.max_sentence_len]
+        normalized = normalized[:self.max_sentence_len]
+        all_words = []
+        all_word_ids = []
+        all_char_for_ids = []
+        all_char_rev_ids = []
+        all_word_lengths = []
+        all_sentence_lengths = []
+        all_cap_ids = []
+        if self.params['word_dim']:
+            word_ids = [self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>']
+                 for w in normalized]
+            if len(word_ids) == 0:
+                raise ValueError('len(word_ids) == 0')
+                # continue
+            all_word_ids.append(self.pad_word(word_ids))
+
+        all_sentence_lengths.append(len(str_words))
+        all_words.append(str_words)
+        # Skip characters that are not in the training set
+        if self.params['char_dim'] > 0:
+            char_ids = [[self.char_to_id[c] for c in w if c in self.char_to_id]
+                        for w in str_words]
+
+            char_for_ids, char_rev_ids, word_lengths = self.pad_chars(char_ids)
+            all_char_for_ids.append(char_for_ids)
+            all_char_rev_ids.append(char_rev_ids)
+            all_word_lengths.append(word_lengths)
+
+        if self.params['cap_dim']:
+            cap_ids = [cap_feature(w) for w in str_words]
+            all_cap_ids.append(self.pad_cap(cap_ids))
+        return {
+                "words": all_words,
+                "word_ids": all_word_ids,
+                "sentence_lengths": all_sentence_lengths,
+                "char_for_ids": all_char_for_ids,
+                "char_rev_ids": all_char_rev_ids,
+                "word_lengths": all_word_lengths,
+                "cap_ids": all_cap_ids
+            }
+
     def batch_iterator(self, fn_train, batch_size):
         num = 0
         with open(fn_train) as fin:
@@ -96,6 +143,7 @@ class DataSet(object):
         index = 0
         num_batch = num // batch_size + int(num % batch_size > 0)
         for _ in xrange(num_batch):
+            all_words = []
             all_word_ids = []
             all_char_for_ids = []
             all_char_rev_ids = []
@@ -116,16 +164,21 @@ class DataSet(object):
                 str_words = [w[0] for w in sentence]
 
                 if self.params['word_dim']:
-                    word_ids = [self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>']
-                         for w in str_words]
+                    word_ids = []
+                    for w in str_words:
+                        w = normalize_word(w)
+                        word_ids.append(self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>'])
+                    # word_ids = [self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>']
+                    #      for w in str_words]
                     if len(word_ids) == 0:
                         raise ValueError('len(word_ids) == 0')
                         # continue
                     all_word_ids.append(self.pad_word(word_ids))
 
                 all_sentence_lengths.append(len(str_words))
+                all_words.append(str_words)
                 # Skip characters that are not in the training set
-                if self.params['char_dim']:
+                if self.params['char_dim'] > 0:
                     char_ids = [[self.char_to_id[c] for c in w if c in self.char_to_id]
                              for w in str_words]
 
@@ -143,6 +196,7 @@ class DataSet(object):
                 all_tags_ids.append(tag_ids)
 
             ret = {
+                "words": all_words,
                 "word_ids": all_word_ids,
                 "sentence_lengths": all_sentence_lengths,
                 "char_for_ids": all_char_for_ids,
@@ -156,13 +210,10 @@ class DataSet(object):
             yield ret
         train_file.close()
 
-
-    def get_named_entity(self, sentence, tag_sequence):
+    def get_named_entity_from_words(self, sentence, tag_sequence):
+        tag_sequence = [self.id_to_tag[t] for t in tag_sequence]
         entities = []
         entity = []
-        sentence = [self.id_to_word[i] for i in sentence]
-
-        tag_sequence = [self.id_to_tag[t] for t in tag_sequence]
         if self.tag_scheme_name == "iobes":
             for w, t in zip(sentence, tag_sequence):
                 if t == 'B' or t == 'O' or t == 'END' or t == 'S':
@@ -176,9 +227,35 @@ class DataSet(object):
                 if t == 'B' or t == 'O' or t == 'END':
                     if len(entity) > 0:
                         entities.append(' '.join(entity))
+                        entity = []
                 if t == 'B' or t == 'I':
                     entity.append(w)
-        return entities, sentence, tag_sequence
+        return entities, tag_sequence
+
+    def get_named_entity_from_ids(self, sentence, tag_sequence):
+        sentence = [self.id_to_word[i] for i in sentence]
+        return self.get_named_entity_from_words(sentence, tag_sequence)
+        # entities = []
+        # entity = []
+        # sentence = [self.id_to_word[i] for i in sentence]
+        # tag_sequence = [self.id_to_tag[t] for t in tag_sequence]
+        # if self.tag_scheme_name == "iobes":
+        #     for w, t in zip(sentence, tag_sequence):
+        #         if t == 'B' or t == 'O' or t == 'END' or t == 'S':
+        #             if len(entity) > 0:
+        #                 entities.append(' '.join(entity))
+        #                 entity = []
+        #         if t == 'B' or t == 'I' or t == 'E' or t == 'S':
+        #             entity.append(w)
+        # else:
+        #     for w, t in zip(sentence, tag_sequence):
+        #         if t == 'B' or t == 'O' or t == 'END':
+        #             if len(entity) > 0:
+        #                 entities.append(' '.join(entity))
+        #                 entity = []
+        #         if t == 'B' or t == 'I':
+        #             entity.append(w)
+        # return entities, sentence, tag_sequence
 
     def iob_to_iobes(self):
         pass
