@@ -39,12 +39,12 @@
 
         <form class="row">
             <div class="form-group col-md-4">
-                <input id="input-text" class="form-control" placeholder="问题" required autofocus name=input-box>
+                <input id="question-input" class="form-control" placeholder="问题" required autofocus name=input-box>
                 <!--<input type="text" placeholder="Search" class="form-control" autofocus="autofocus" required name=input-box>-->
             </div>
 
             <button type="button" class="btn btn-success">
-                <span id="entity-mention" class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>
+                <span id="get-mention" class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>
             </button>
             <span>&nbsp;</span>
 
@@ -54,84 +54,139 @@
             </div>
         </form>
 
-        <!--<form class="form-signin">-->
 
-            <!--<div class="row">-->
-                <!--<div class="col-md-4"><h2 class="form-signin-heading">搜索相关性</h2></div>-->
-            <!--</div>-->
-            <!--<div class="row">-->
-                <!--<div class="col-md-4"><input id="input-text" class="form-control" placeholder="标题" required autofocus name=input-box></div>-->
-                <!--<div class="col-md-2"><button id="title-title" class="btn btn-info btn-sm btn-block"><span  aria-hidden="true">Title-Title</span></button></div>-->
-                <!--<div class="col-md-2"><button id="query-query" class="btn btn-default btn-sm btn-block"><span  aria-hidden="true"></span>Query-Query</button></div>-->
-                <!--<div class="col-md-2"><button id="query-title" class="btn btn-default btn-sm btn-block"><span  aria-hidden="true"></span>Query-Title</button></div>-->
-            <!--</div>-->
-            <div class="row">
-                <!--<div class="col-md-4"><span>&nbsp;</span></div>-->
+        <div class="row">
+            <!--<div class="col-md-4"><span>&nbsp;</span></div>-->
+        </div>
+        <div>
+            <div class="panel panel-default">
+                <!-- Default panel contents -->
+                <div class="panel-heading" id="result-type">结果</div>
+                <!--<div class="panel-body">-->
+                    <!--<p>...</p>-->
+                <!--</div>-->
+                <!-- Table -->
+                <table class="table">
+                    <thead><tr><td class="col-md-1">#</td><td class="col-md-10">实体词</td></thead>
+                    <tbody id="mention-list">
+                        <tr><td><small>1</small></td><td><small>xxx</small>
+                    </tbody>
+                </table>
             </div>
-            <div>
-                <div class="panel panel-default">
-                    <!-- Default panel contents -->
-                    <div class="panel-heading" id="result-type">相似的标题</div>
-                    <!--<div class="panel-body">-->
-                        <!--<p>...</p>-->
-                    <!--</div>-->
-                    <!-- Table -->
-                    <table class="table">
-                        <thead><tr><td class="col-md-1">#</td><td class="col-md-10">实体词</td></thead>
-                        <tbody id="mention-list">
-                            <tr><td><small>1</small></td><td><small>xxx</small>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        <!--</form>-->
+        </div>
 
+        <form class="row">
+            <div class="form-group col-md-4">
+                <input id="mid-input" class="form-control" placeholder="mid" required name=input-box>
+                <!--<input type="text" placeholder="Search" class="form-control" autofocus="autofocus" required name=input-box>-->
+            </div>
+
+            <button type="button" class="btn btn-success">
+                <span id="get-name-by-mid" class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>
+            </button>
+            <span>&nbsp;</span>
+
+            <!--<div class="btn-group" role="group" aria-label="...">-->
+                <!--<button id="query-query" type="button" class="btn btn-default">Query</button>-->
+                <!--<button id="title-title" type="button" class="btn btn-default">Title</button>-->
+            <!--</div>-->
+        </form>
+        <div class="row">
+            <!--<div class="col-md-4"><span>&nbsp;</span></div>-->
+        </div>
+        <div>
+            <div class="panel panel-default">
+                <!-- Default panel contents -->
+                <div class="panel-heading" id="mid-to-name-head">名字</div>
+                <!--<div class="panel-body">-->
+                    <!--<p>...</p>-->
+                <!--</div>-->
+                <!-- Table -->
+                <table class="table">
+                    <thead><tr><td class="col-md-1">#</td><td class="col-md-10">名字</td></thead>
+                    <tbody id="mid-to-name-res-list">
+                        <tr><td><small></small></td><td><small></small>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <form class="row">
+            <div class="form-group col-md-4">
+                <input id="surface-input" class="form-control" placeholder="surface" required name=input-box>
+            </div>
+
+            <button type="button" class="btn btn-success">
+                <span id="get-mids-by-surface" class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>
+            </button>
+            <span>&nbsp;</span>
+
+            <!--<div class="btn-group" role="group" aria-label="...">-->
+                <!--<button id="query-query" type="button" class="btn btn-default">Query</button>-->
+                <!--<button id="title-title" type="button" class="btn btn-default">Title</button>-->
+            <!--</div>-->
+        </form>
+        <div class="row">
+            <!--<div class="col-md-4"><span>&nbsp;</span></div>-->
+        </div>
+        <div>
+            <div class="panel panel-default">
+                <!-- Default panel contents -->
+                <div class="panel-heading" id="surface-to-mids-head">候选实体</div>
+                <!--<div class="panel-body">-->
+                    <!--<p>...</p>-->
+                <!--</div>-->
+                <!-- Table -->
+                <table class="table">
+                    <thead><tr><td class="col-md-1">#</td><td class="col-md-10">候选实体</td></thead>
+                    <tbody id="surface-to-mids-res-list">
+                        <tr><td><small></small></td><td><small></small>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div> <!-- /container -->
     {% block scripts %}
     <script type=text/javascript>
         $(function() {
-            $('#title-title').bind('click', function() {
-                $.getJSON('/t/get_title_nns', {
-                    title: $('input[name="input-box"]').val(),
-                }, function(data) {
-                    $("#result-type").text('相似的标题')
-                    $("#title-list > tr").remove();
-                    <!--console.log(data)-->
-                    /*for( var i = 0, len = data.length; i < len; i++ ) {
-                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + data[i].title + '</td><td class="col-md-1">' + data[i].score +'</td></tr>';
-                        $($line).appendTo('#title-list');
-                    };*/
-                    $.each(data, function(i, val){
-                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val.title + '</td><td class="col-md-1">' + val.score +'</td></tr>';
-                        $($line).appendTo('#title-list');
-                    });
-                });
-                return false;
-            });
 
-            $('#query-query').bind('click', function() {
-                $.getJSON('/t/get_query_nns', {
-                    query: $('input[name="input-box"]').val(),
-                }, function(data) {
-                    $("#result-type").text('相似问题')
-                    $("#title-list > tr").remove();
-                    $.each(data, function(i, val){
-                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val.query + '</td><td class="col-md-1">' + val.score +'</td></tr>';
-                        $($line).appendTo('#title-list');
-                    });
-                });
-                return false;
-            });
-
-            $('#entity-mention').bind('click', function() {
+            $('#get-mention').bind('click', function() {
                 $.getJSON('/get_entity_mention', {
-                    sentence: $('input[name="input-box"]').val(),
+                    sentence: $('#question-input').val(),
                 }, function(data) {
-                    $("#result-type").text('结果')
+                    <!--$("#result-type").text('结果')-->
                     $("#mention-list > tr").remove();
                     $.each(data, function(i, val){
                         $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val + '</td><td class="col-md-1">';
                         $($line).appendTo('#mention-list');
+                    });
+                });
+                return false;
+            });
+
+            $('#get-name-by-mid').bind('click', function() {
+                $.getJSON('/mid_to_name', {
+                    mid: $("#mid-input").val(),
+                }, function(data) {
+
+                    $("#mid-to-name-res-list > tr").remove();
+                    $.each(data, function(i, val){
+                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val + '</td><td class="col-md-1">';
+                        $($line).appendTo('#mid-to-name-res-list');
+                    });
+                });
+                return false;
+            });
+
+            $('#get-mids-by-surface').bind('click', function() {
+                $.getJSON('/surface_to_mids', {
+                    surface: $("#surface-input").val(),
+                }, function(data) {
+
+                    $("#surface-to-mids-res-list > tr").remove();
+                    $.each(data, function(i, val){
+                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val + '</td><td class="col-md-1">';
+                        $($line).appendTo('#surface-to-mids-res-list');
                     });
                 });
                 return false;

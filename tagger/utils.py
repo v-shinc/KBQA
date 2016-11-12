@@ -1,22 +1,22 @@
 #coding=utf8
+import sys
 def normalize_word(name):
     if name == '<START>' or name == '<END>':
         return name
     name = name.lower()
-    if name.endswith(u"’s") or name.endswith('\'s'):
-        name = name[:-2]
+    if name.endswith("'s"):
+        return name
 
     name = name.replace('!', '')
     name = name.replace('.', '')
     name = name.replace(',', '')
+    name = name.replace('-', '')
 
-    name = name.replace(u"\’", '')
-    name = name.replace('\'', '')
-    name = name.replace('\"', '')
+    name = name.replace(u"’", '')
+    name = name.replace("'", '')
+    name = name.replace('"', '')
     name = name.replace('\\', '')
-    # name = name.replace('/', '')
-
-    #add
+    name = name.replace('/', '')
     name = name.replace(':', '')
     name = name.replace('(', '')
     name = name.replace(')', '')
@@ -40,23 +40,54 @@ def split_sentence(text):
             new_words.append(w)
     return new_words, normalized
 
-# def normalize_word(name):
-#     name = name.lower()
-#     name = name.replace('!', ' ')
-#     name = name.replace('.', ' ')
-#     name = name.replace(',', ' ')
-#     name = name.replace('-', ' ')
-#     name = name.replace('_', ' ')
-#     # name = name.replace(' ', '')
-#     name = name.replace(u"’", ' ')
-#     name = name.replace('\'', ' ')
-#     name = name.replace('"', ' ')
-#     name = name.replace('\\', ' ')
-#     name = name.replace('/', ' ')
-#     name = name.replace(u'–', ' ')
-#     name = name.replace(u'—', ' ')
-#     #add
-#     name = name.replace(':', ' ')
-#     name = name.replace('(', ' ')
-#     name = name.replace(')', ' ')
-#     return name
+def naive_split(text):
+
+    text = text.lower()
+    text = strip_accents(text)
+    # to_blank = set(['\\', '-', u'–', u'—','-', '_', ':', '(', ')', '!', '?', ',', '.', '/', ';', '"', '...', u'“', u'”', u'…'])
+    to_blank = set(['\\', '-', '-', '_', ':', '(', ')', '!', '?', ',', '.', '/', ';', '"', '...'])
+    sentence = ''
+    l = len(text)
+    i = 0
+
+    while i < l:
+        c = text[i]
+        # if c == '!' or c == '?':
+        #     continue
+        if c == '#':
+            sentence += ' # '
+            i += 1
+        elif i + 4 <= l and text[i:i+4] == "n't ":
+            sentence += ' ' + text[i:i + 4]
+            i += 4
+        elif c == "'" or c == u"’":
+            if i + 3 <= l and (text[i:i+3] == "'s " or text[i:i+3] == "'m " or text[i:i+3] == "'d "):
+                sentence += ' '+text[i:i+3]
+                i += 3
+            elif i + 4 <= l and (text[i:i+4] == "'ll " or text[i:i+4] == "'re ") :
+                sentence += ' ' + text[i:i+4]
+                i += 4
+            else:
+                sentence += " ' "
+                i += 1
+
+        elif c in to_blank:
+            sentence += ' '
+            i += 1
+        else:
+            sentence += c
+            i += 1
+
+    return sentence.split()
+
+
+import unicodedata
+def strip_accents(s):
+    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore')
+    return s
+
+def get_all_unichar():
+    return ' '.join([unichr(i) for i in range(sys.maxunicode)])
+
+
+

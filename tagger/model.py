@@ -12,10 +12,12 @@ class DeepCRF(object):
                  rnn_dim,
                  word_bidirect,
                  cap_dim,
+                 pos_dim,
                  load_path,
                  num_word,
                  num_char,
                  num_cap,
+                 num_pos,
                  num_tag):
         self.word_ids = tf.placeholder(tf.int32, [None, max_seq_len], name="word_ids")
         self.seq_lengths = tf.placeholder(tf.int64, [None], name="seq_lengths") # number of valid words
@@ -24,10 +26,12 @@ class DeepCRF(object):
         self.word_lengths = tf.placeholder(tf.int32, [None, max_seq_len], name="char_pos_ids")
         self.tag_ids = tf.placeholder(tf.int32, [None, max_seq_len], name='tag_ids')
         self.cap_ids = tf.placeholder(tf.int32, [None, max_seq_len], name='cap_ids')
+        self.pos_ids = tf.placeholder(tf.int32, [None, max_seq_len], name='pos_ids')
         self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
         self.word_dim = word_dim
         self.char_dim = char_dim
         self.cap_dim = cap_dim
+        self.pos_dim = pos_dim
         self.char_bidirect = char_bidirect
         initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
         inputs = []
@@ -68,8 +72,12 @@ class DeepCRF(object):
                 cap_embedding = tf.get_variable('cap_embedding', [num_cap, cap_dim], initializer=initializer)
                 cap_embedded = tf.nn.embedding_lookup(cap_embedding, self.cap_ids, name="cap_layer")
                 inputs.append(cap_embedded)
-
                 input_dim += cap_dim
+            if pos_dim:
+                pos_embedding = tf.get_variable('pos_embedding', [num_pos, pos_dim], initializer=initializer)
+                pos_embedded = tf.nn.embedding_lookup(pos_embedding, self.pos_ids, name='pos_layer')
+                inputs.append(pos_embedded)
+                input_dim += pos_dim
 
             inputs = tf.concat(2, inputs)
 
@@ -158,7 +166,7 @@ class DeepCRF(object):
         else:
             return outputs  # [batch_size, max_time, cell.output_size].
 
-    def fit(self, tag_ids, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids, dropout_keep_prob):
+    def fit(self, tag_ids, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids, pos_ids, dropout_keep_prob):
         feed_dict = dict()
         feed_dict[self.seq_lengths] = seq_lengths
         feed_dict[self.tag_ids] = tag_ids
@@ -172,11 +180,12 @@ class DeepCRF(object):
                 feed_dict[self.char_rev_ids] = char_rev_ids
         if self.cap_dim:
             feed_dict[self.cap_ids] = cap_ids
-
+        if self.pos_dim:
+            feed_dict[self.pos_ids] = pos_ids
         _, loss = self.session.run([self.train_op, self.loss], feed_dict)
         return loss
 
-    def predict(self, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids):
+    def predict(self, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids, pos_ids):
         feed_dict = {}
         feed_dict[self.seq_lengths] = seq_lengths
         feed_dict[self.dropout_keep_prob] = 1
@@ -189,6 +198,8 @@ class DeepCRF(object):
                 feed_dict[self.char_rev_ids] = char_rev_ids
         if self.cap_dim:
             feed_dict[self.cap_ids] = cap_ids
+        if self.pos_dim:
+            feed_dict[self.pos_ids] = pos_ids
         tag_scores, transitions = self.session.run([self.tag_scores, self.transitions], feed_dict)
         batch_viterbi_sequence = []
         for tag_score_, seq_length_ in zip(tag_scores, seq_lengths):

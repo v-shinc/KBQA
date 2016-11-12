@@ -1,9 +1,8 @@
 #coding=utf8
 import numpy as np
-from utils import split_sentence, normalize_word
 # data format:  word1[space]tag1[tab]word2[space]tag2[tab]...
 
-def load_mapping(fn_word):
+def load_mapping_and_count(fn_word):
     index = 0
     word_to_id = dict()
     id_to_word = dict()
@@ -13,10 +12,21 @@ def load_mapping(fn_word):
             w, cnt = line.decode('utf8').strip().split('\t')
             word_to_id[w] = index
             id_to_word[index] = w
-
             word_to_count[w] = cnt
             index += 1
     return word_to_id, id_to_word, word_to_count
+
+def load_mapping(fn):
+    index = 0
+    xx_to_id = dict()
+    id_to_xx = dict()
+    with open(fn) as fin:
+        for line in fin:
+            w = line.decode('utf8').strip()
+            xx_to_id[w] = index
+            id_to_xx[index] = w
+            index += 1
+    return xx_to_id, id_to_xx
 
 def cap_feature(s):
     """
@@ -44,10 +54,11 @@ def load_tag_mapping(tag_scheme_name):
     id_to_tag = dict(zip(range(len(tag_scheme[tag_scheme_name])), tag_scheme[tag_scheme_name]))
     return tag_to_id, id_to_tag
 
-class DataSet(object):
-    def __init__(self, fn_word, fn_char, params):
 
-        self.word_to_id, self.id_to_word, self.word_to_count = load_mapping(fn_word)
+class DataSet(object):
+    def __init__(self, params):
+
+        self.word_to_id, self.id_to_word, self.word_to_count = load_mapping_and_count(params['fn_word'])
         if '<UNK>' not in self.word_to_id:
             unknow_idx = len(self.word_to_id)
             self.word_to_id['<UNK>'] = unknow_idx
@@ -64,7 +75,10 @@ class DataSet(object):
             self.id_to_word[end_idx] = '<END>'
             self.word_to_count['<END>'] = 1000
         if 'char_dim' in params:
-            self.char_to_id, self.id_to_char, self.char_to_count = load_mapping(fn_char)
+            self.char_to_id, self.id_to_char, self.char_to_count = load_mapping_and_count(params['fn_char'])
+        if 'pos_dim' in params:
+            self.pos_to_id, self.id_to_pos = load_mapping(params['fn_pos'])
+
         self.tag_scheme_name = params['tag_scheme']
         self.tag_to_id, self.id_to_tag = load_tag_mapping(self.tag_scheme_name)
         self.char_padding = len(self.char_to_id)
@@ -86,14 +100,15 @@ class DataSet(object):
     @property
     def num_tag(self):
         return len(self.tag_to_id)
+    @property
+    def num_pos(self):
+        return len(self.pos_to_id) if self.pos_to_id else 0
 
-    def create_model_input(self, sentence):
+    def create_model_input(self, sentence, pos=None):
         if not sentence.startswith('<START>'):
             sentence = '<START> ' + sentence + ' <END>'
-        str_words, normalized = split_sentence(sentence)
 
-        str_words = str_words[:self.max_sentence_len]
-        normalized = normalized[:self.max_sentence_len]
+        sentence = sentence.split()[:self.max_word_len]
         all_words = []
         all_word_ids = []
         all_char_for_ids = []
@@ -101,20 +116,21 @@ class DataSet(object):
         all_word_lengths = []
         all_sentence_lengths = []
         all_cap_ids = []
+        all_pos_ids = []
         if self.params['word_dim']:
             word_ids = [self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>']
-                 for w in normalized]
+                 for w in sentence]
             if len(word_ids) == 0:
                 raise ValueError('len(word_ids) == 0')
                 # continue
-            all_word_ids.append(self.pad_word(word_ids))
+            all_word_ids.append(self.pad_xx(word_ids, self.num_word))
 
-        all_sentence_lengths.append(len(str_words))
-        all_words.append(str_words)
+        all_sentence_lengths.append(len(sentence))
+        all_words.append(sentence)
         # Skip characters that are not in the training set
         if self.params['char_dim'] > 0:
             char_ids = [[self.char_to_id[c] for c in w if c in self.char_to_id]
-                        for w in str_words]
+                        for w in sentence]
 
             char_for_ids, char_rev_ids, word_lengths = self.pad_chars(char_ids)
             all_char_for_ids.append(char_for_ids)
@@ -122,8 +138,13 @@ class DataSet(object):
             all_word_lengths.append(word_lengths)
 
         if self.params['cap_dim']:
-            cap_ids = [cap_feature(w) for w in str_words]
-            all_cap_ids.append(self.pad_cap(cap_ids))
+            cap_ids = [cap_feature(w) for w in sentence]
+            all_cap_ids.append(self.pad_xx(cap_ids, self.num_cap))
+
+        if self.params['pos_dim']:
+            pos_ids = [self.pos_to_id[p] for p in pos.split()]
+            all_pos_ids.append(self.pad_xx(pos_ids, self.num_pos))
+
         return {
                 "words": all_words,
                 "word_ids": all_word_ids,
@@ -131,7 +152,8 @@ class DataSet(object):
                 "char_for_ids": all_char_for_ids,
                 "char_rev_ids": all_char_rev_ids,
                 "word_lengths": all_word_lengths,
-                "cap_ids": all_cap_ids
+                "cap_ids": all_cap_ids,
+                "pos_ids": all_pos_ids
             }
 
     def batch_iterator(self, fn_train, batch_size):
@@ -150,7 +172,9 @@ class DataSet(object):
             all_word_lengths = []
             all_sentence_lengths = []
             all_cap_ids = []
+            all_pos_ids = []
             all_tags_ids = []
+            all_entities = []
             while len(all_tags_ids) < batch_size:
                 if index == num:
                     train_file.seek(0)
@@ -159,21 +183,17 @@ class DataSet(object):
                 index += 1
 
                 line = line.decode('utf8').strip().split('\t')
-                sentence = [w.split() for w in line[:self.max_sentence_len]]
-                tags = [w[1] for w in sentence]
-                str_words = [w[0] for w in sentence]
+                topic_entity, sentence, tags = line[:3]
+                str_words = [w for w in sentence.split()[:self.max_sentence_len]]
+                tags = [w for w in tags.split()[:self.max_sentence_len]]
 
                 if self.params['word_dim']:
-                    word_ids = []
-                    for w in str_words:
-                        w = normalize_word(w)
-                        word_ids.append(self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>'])
-                    # word_ids = [self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>']
-                    #      for w in str_words]
+                    word_ids = [self.word_to_id[w if (w in self.word_to_id and self.word_to_count[w] > 1) else '<UNK>']
+                                for w in str_words]
                     if len(word_ids) == 0:
                         raise ValueError('len(word_ids) == 0')
                         # continue
-                    all_word_ids.append(self.pad_word(word_ids))
+                    all_word_ids.append(self.pad_xx(word_ids, self.num_word))
 
                 all_sentence_lengths.append(len(str_words))
                 all_words.append(str_words)
@@ -189,10 +209,13 @@ class DataSet(object):
 
                 if self.params['cap_dim']:
                     cap_ids = [cap_feature(w) for w in str_words]
-                    all_cap_ids.append(self.pad_cap(cap_ids))
+                    all_cap_ids.append(self.pad_xx(cap_ids, self.num_cap))
 
-                tag_ids = self.pad_tag([self.tag_to_id[t] for t in tags])
-
+                if self.params['pos_dim']:
+                    pos_ids = [self.pos_to_id[w] for w in line[-1].split()]
+                    all_pos_ids.append(self.pad_xx(pos_ids, self.num_pos))
+                tag_ids = self.pad_xx([self.tag_to_id[t] for t in tags], self.tag_padding)
+                all_entities.append(topic_entity)
                 all_tags_ids.append(tag_ids)
 
             ret = {
@@ -203,7 +226,9 @@ class DataSet(object):
                 "char_rev_ids": all_char_rev_ids,
                 "word_lengths": all_word_lengths,
                 "cap_ids": all_cap_ids,
-                "tag_ids": all_tags_ids
+                "pos_ids": all_pos_ids,
+                "tag_ids": all_tags_ids,
+                "entities": all_entities
             }
             for k, v in ret.items():
                 ret[k] = np.array(v)
@@ -290,19 +315,11 @@ class DataSet(object):
             word_lengths.append(len(w))
         return char_for, char_rev, word_lengths
 
-    def pad_cap(self, caps):
-        return caps + [0] * (self.max_sentence_len - len(caps))
-    def pad_word(self, words):
-        """
-        Pad the words of the sentence
-        :param words: list of ints (list of word index)
-        :return: padded sentence
-        """
-        words = words[:self.max_sentence_len]
-        return words + [self.word_padding] * (self.max_sentence_len - len(words))
+    def pad_xx(self, seq, padding):
+        seq = seq[:self.max_sentence_len]
+        return seq + [padding] * (self.max_sentence_len - len(seq))
 
-    def pad_tag(self, tags):
-        tags = tags[:self.max_sentence_len]
-        return tags + [self.tag_padding] * (self.max_sentence_len - len(tags))
+    def pos_ids_to_words(self, pos_ids):
+        return [self.id_to_pos[p] for p in pos_ids]
 
 

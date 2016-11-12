@@ -1,7 +1,6 @@
 import os
 import json
 import sys
-import numpy as np
 from time import time
 from collections import OrderedDict
 from model import DeepCRF
@@ -14,6 +13,7 @@ flags.DEFINE_string("fn_train", "", "Train set location.")
 flags.DEFINE_string("fn_dev", "", "Dev set location.")
 flags.DEFINE_string("fn_word", "", "Word list location.")
 flags.DEFINE_string("fn_char", "", "Character list location.")
+flags.DEFINE_string("fn_pos", "", "Part of speech tag list location.")
 flags.DEFINE_string("dir_name", "", "Name of directory to save model.")
 flags.DEFINE_integer("max_sentence_len", 36, "Max sentence length.")
 flags.DEFINE_integer("max_word_len", 22, "Max number of character in a word.")
@@ -25,6 +25,7 @@ flags.DEFINE_integer("word_dim", 50, "Token embedding dimension.")
 flags.DEFINE_integer("word_rnn_dim", 50, "Token LSTM hidden layer size.")
 flags.DEFINE_boolean("word_bidirect", True, "Use a bidirectional RNN for words.")
 flags.DEFINE_integer("cap_dim", 0, "Capitalization feature dimension (0 to disable).")
+flags.DEFINE_integer("pos_dim", 0, "Part of speech feature dimension (0 to disable).")
 flags.DEFINE_float("dropout_keep_prob", 0.5, "Droupout keep rate on the input (1 = no dropout).")
 flags.DEFINE_boolean("reload", False, "Reload the last saved model.")
 flags.DEFINE_integer("num_epoch", 50, "Number of training epoch.")
@@ -65,19 +66,25 @@ if __name__ == '__main__':
     parameters['word_rnn_dim'] = FLAGS.word_rnn_dim
     parameters['word_bidirect'] = FLAGS.word_bidirect == 1
     parameters['cap_dim'] = FLAGS.cap_dim
+    parameters['pos_dim'] = FLAGS.pos_dim
     parameters['dropout_keep_prob'] = FLAGS.dropout_keep_prob
     if FLAGS.reload == 1:
         parameters['load_path'] = save_path
     else:
         parameters['load_path'] = None
     parameters['tag_scheme'] = FLAGS.tag_scheme
-    dataset = DataSet(FLAGS.fn_word, FLAGS.fn_char, parameters)
+    parameters['fn_word'] = os.path.abspath(os.path.join(os.path.curdir, FLAGS.fn_word))
+    parameters['fn_char'] = os.path.abspath(os.path.join(os.path.curdir, FLAGS.fn_char))
+    if FLAGS.pos_dim:
+        parameters['fn_pos'] = os.path.abspath(os.path.join(os.path.curdir, FLAGS.fn_pos))
+    dataset = DataSet(parameters)
     parameters['num_word'] = dataset.num_word
     parameters['num_char'] = dataset.num_char
     parameters['num_cap'] = dataset.num_cap
     parameters['num_tag'] = dataset.num_tag
-    parameters['fn_word'] = os.path.abspath(os.path.join(os.path.curdir, FLAGS.fn_word))
-    parameters['fn_char'] = os.path.abspath(os.path.join(os.path.curdir, FLAGS.fn_char))
+    parameters['num_pos'] = dataset.num_pos
+
+
     model = DeepCRF(
         FLAGS.max_sentence_len,
         FLAGS.max_word_len,
@@ -88,10 +95,12 @@ if __name__ == '__main__':
         FLAGS.word_rnn_dim,
         FLAGS.word_bidirect == 1,
         FLAGS.cap_dim,
+        FLAGS.pos_dim,
         save_path if FLAGS.reload else None,
         dataset.num_word,
         dataset.num_char,
         dataset.num_cap,
+        dataset.num_pos,
         dataset.num_tag)
     fout_log = open(log_path, 'a')
 
@@ -120,6 +129,7 @@ if __name__ == '__main__':
                 data['char_rev_ids'],
                 data['word_lengths'],
                 data['cap_ids'],
+                data['pos_ids'],
                 FLAGS.dropout_keep_prob
             )
             total_loss += loss

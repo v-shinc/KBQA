@@ -46,6 +46,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
             data['char_rev_ids'],
             data['word_lengths'],
             data['cap_ids'],
+            data['pos_ids']
         )
         for i in xrange(len(viterbi_sequences)):
             seq_len = data['sentence_lengths'][i]
@@ -54,9 +55,6 @@ def evaluate(dataset, model, fn_dev, fn_res):
             # Evaluate word-level accuracy
             correct_labels += np.sum(np.equal(viterbi_sequence_, y_))
             total_labels += seq_len
-            # word_ids = data['word_ids'][i][:seq_len]
-            # pred_entities, sentence, pred_tag_sequence = dataset.get_named_entity_from_ids(word_ids, viterbi_sequence_)
-            # gold_entities, _, gold_tag_sequence = dataset.get_named_entity_from_ids(word_ids, y_)
             words = data['words'][i][:seq_len]
             pred_entities, pred_tag_sequence = dataset.get_named_entity_from_words(words, viterbi_sequence_)
             gold_entities, gold_tag_sequence = dataset.get_named_entity_from_words(words, y_)
@@ -67,10 +65,16 @@ def evaluate(dataset, model, fn_dev, fn_res):
             avg_f1 += f1
             num += 1
             if res_file:
-                print >> res_file, (" ".join(["%s|%s|%s" % (w, p, g)for w, p, g in
-                                             zip(words, gold_tag_sequence, pred_tag_sequence)])).encode('utf8')
-                print >> res_file, ("gold entities: %s" % " ".join(gold_entities)).encode('utf8')
-                print >> res_file, ("predicted entities: %s" % " ".join(pred_entities)).encode('utf8')
+                tag_res = " ".join(["%s|%s|%s" % (w, p, g) for w, p, g in
+                          zip(words, gold_tag_sequence, pred_tag_sequence)])
+                print >> res_file, json.dumps(
+                    {'tag_res': tag_res,
+                     'gold': "\t".join(gold_entities),
+                     'predict': "\t".join(pred_entities),
+                     'entity': data['entities'][i],
+                     'pos': dataset.pos_ids_to_words(data['pos_ids'][i][:seq_len])
+                     }, encoding='utf8',)
+
 
     accuracy = 100 * correct_labels / float(total_labels)
     avg_f1 /= num
@@ -86,8 +90,6 @@ def evaluate(dataset, model, fn_dev, fn_res):
     res_info += "Average recall: %s\n" % avg_recall
     res_info += "Average f1 score over all sentence: %s\n" % avg_f1
     res_info += "F1 of average recall and precision: %s\n" % new_f1
-    if res_file:
-        print >> res_file, res_info
     print res_info
     return accuracy, avg_precision, avg_recall, avg_f1,new_f1, res_info
 
@@ -104,7 +106,7 @@ if __name__ == '__main__':
 
     config_path = os.path.join(dir_path, 'config.json')
     parameters = json.load(open(config_path))
-    dataset = DataSet(parameters['fn_word'], parameters['fn_char'], parameters)
+    dataset = DataSet(parameters)
     model = DeepCRF(
         parameters['max_sentence_len'],
         parameters['max_word_len'],
@@ -115,10 +117,12 @@ if __name__ == '__main__':
         parameters['word_rnn_dim'],
         parameters['word_bidirect'] == 1,
         parameters['cap_dim'],
+        parameters['pos_dim'],
         save_path,
         parameters['num_word'],
         parameters['num_char'],
         parameters['num_cap'],
+        parameters['num_pos'],
         parameters['num_tag']
     )
     fn_res = os.path.join(dir_path, res_name)

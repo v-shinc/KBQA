@@ -23,3 +23,4 @@ def read_configuration(configfile):
     parser.read(configfile)
     config = parser
     return parser
+

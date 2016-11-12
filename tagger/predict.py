@@ -20,13 +20,15 @@ class EntityMentionTagger(object):
             parameters['word_rnn_dim'],
             parameters['word_bidirect'] == 1,
             parameters['cap_dim'],
+            parameters['pos_dim'],
             save_path,
             parameters['num_word'],
             parameters['num_char'],
             parameters['num_cap'],
+            parameters['num_pos'],
             parameters['num_tag']
         )
-        self.dataset = DataSet(parameters['fn_word'], parameters['fn_char'], parameters)
+        self.dataset = DataSet(parameters)
 
     def tag(self, sentence, include_info=False):
         data = self.dataset.create_model_input(sentence)
@@ -37,6 +39,7 @@ class EntityMentionTagger(object):
             data['char_rev_ids'],
             data['word_lengths'],
             data['cap_ids'],
+            data['pod_ids']
         )
         viterbi_sequence = viterbi_sequences[0]
         seq_len = data['sentence_lengths'][0]

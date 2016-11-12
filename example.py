@@ -123,4 +123,4 @@ if __name__ == '__main__':
     # gen_description_data(['data/wq.dev.complete.v2', 'data/wq.train.complete.v2'], 'data/wq.entity.train')
     # gen_description_data(['data/wq.test.complete.v2'], 'data/wq.entity.test')
     link_entity_in_simple_question_mt('data/simple.test.el.v2', 'data/sq.entity.test')
-    link_entity_in_simple_question_mt('data/simple.train.dev.el.v2', 'data/sq.entity.train')
+    # link_entity_in_simple_question_mt('data/simple.train.dev.el.v2', 'data/sq.entity.train')
