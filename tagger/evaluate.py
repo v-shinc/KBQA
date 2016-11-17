@@ -39,7 +39,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
             sys.stdout.write("Process to %d\r" % lno)
             sys.stdout.flush()
         lno += batch_size
-        viterbi_sequences = model.predict(
+        viterbi_sequences, scores = model.predict_topk(
             data['sentence_lengths'],
             data['word_ids'],
             data['char_for_ids'],
@@ -48,29 +48,39 @@ def evaluate(dataset, model, fn_dev, fn_res):
             data['cap_ids'],
             data['pos_ids']
         )
+
         for i in xrange(len(viterbi_sequences)):
+
             seq_len = data['sentence_lengths'][i]
             y_ = data['tag_ids'][i][:seq_len]
-            viterbi_sequence_ = viterbi_sequences[i]
-            # Evaluate word-level accuracy
-            correct_labels += np.sum(np.equal(viterbi_sequence_, y_))
-            total_labels += seq_len
             words = data['words'][i][:seq_len]
-            pred_entities, pred_tag_sequence = dataset.get_named_entity_from_words(words, viterbi_sequence_)
+            print data['words'][i][:seq_len]
             gold_entities, gold_tag_sequence = dataset.get_named_entity_from_words(words, y_)
+            correct_labels += np.sum(np.equal(viterbi_sequences[i][0], y_))
+            total_labels += seq_len
 
-            precision, recall, f1 = compute_f1(gold_entities, pred_entities)
+            all_pred_entities = set()
+            all_pred_tag_sequence = []
+            for k in range(2):
+                if k == 1 and scores[i][1] * 1.0 / scores[i][0] < 0.95:
+                    break
+                viterbi_sequence_ = viterbi_sequences[i][k]
+                pred_entities, pred_tag_sequence = dataset.get_named_entity_from_words(words, viterbi_sequence_)
+                all_pred_entities.update(pred_entities)
+                all_pred_tag_sequence.append(pred_tag_sequence)
+                print pred_entities, scores[i][k]
+            precision, recall, f1 = compute_f1(gold_entities, all_pred_entities)
             avg_precision += precision
             avg_recall += recall
             avg_f1 += f1
             num += 1
             if res_file:
                 tag_res = " ".join(["%s|%s|%s" % (w, p, g) for w, p, g in
-                          zip(words, gold_tag_sequence, pred_tag_sequence)])
+                          zip(words, gold_tag_sequence, all_pred_tag_sequence[0])])
                 print >> res_file, json.dumps(
                     {'tag_res': tag_res,
                      'gold': "\t".join(gold_entities),
-                     'predict': "\t".join(pred_entities),
+                     'predict': "\t".join(all_pred_entities),
                      'entity': data['entities'][i],
                      'pos': dataset.pos_ids_to_words(data['pos_ids'][i][:seq_len])
                      }, encoding='utf8',)

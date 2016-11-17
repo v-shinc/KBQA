@@ -211,6 +211,34 @@ class DeepCRF(object):
             batch_viterbi_sequence.append(viterbi_sequence)
         return batch_viterbi_sequence
 
+    def predict_topk(self, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids, pos_ids):
+        feed_dict = {}
+        feed_dict[self.seq_lengths] = seq_lengths
+        feed_dict[self.dropout_keep_prob] = 1
+        if self.word_dim:
+            feed_dict[self.word_ids] = word_ids
+        if self.char_dim:
+            feed_dict[self.char_for_ids] = char_for_ids
+            feed_dict[self.word_lengths] = word_lengths
+            if self.char_bidirect:
+                feed_dict[self.char_rev_ids] = char_rev_ids
+        if self.cap_dim:
+            feed_dict[self.cap_ids] = cap_ids
+        if self.pos_dim:
+            feed_dict[self.pos_ids] = pos_ids
+        tag_scores, transitions = self.session.run([self.tag_scores, self.transitions], feed_dict)
+        batch_viterbi_sequence = []
+        batch_score = []
+        for tag_score_, seq_length_ in zip(tag_scores, seq_lengths):
+            # Remove padding from scores and tag sequence.
+            tag_score_ = tag_score_[:seq_length_]
+
+            # Compute the highest scoring sequence.
+            viterbi_sequence, scores = crf.viterbi_decode_top2(tag_score_, transitions)
+            batch_viterbi_sequence.append(viterbi_sequence)
+            batch_score.append(scores)
+        return batch_viterbi_sequence, batch_score
+
     def save(self, save_path):
         return self.saver.save(self.session, save_path)
     # def evaluate(self, seq_lengths, word_ids, char_for_ids, char_rev_ids, char_pos_ids, cap_ids, tag_ids):

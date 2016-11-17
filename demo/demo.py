@@ -1,13 +1,11 @@
 import sys
 sys.path.insert(0, '..')
-from flask import Flask, jsonify
+from flask import Flask
 from flask.ext.bootstrap import Bootstrap
 from flask import render_template,request
-from flask import abort, redirect, url_for
-from db_manager import DBManager
+from utils.db_manager import DBManager
 import json
 import globals
-from tagger.predict import EntityMentionTagger
 
 static_path = 'static'
 
@@ -51,6 +49,11 @@ class KBQADemo(object):
             print mids
             res = {'candidates': '<br>'.join('%s %s' % (m[0], m[1]) for m in mids)}
             return json.dumps(res)
+        @self.app.route('/get_subgraph', methods=['GET', 'POST'])
+        def get_subgraph():
+            mid = request.args.get('mid')
+            data = []
+            data.append({'name': "chensn"})
         # @self.app.route('/t/get_title_nns/', methods=['GET', 'POST'])
         # def get_title_nns():
         #     # query = request.args.get('query', '', type=str)

@@ -239,6 +239,7 @@ class DataSet(object):
         tag_sequence = [self.id_to_tag[t] for t in tag_sequence]
         entities = []
         entity = []
+
         if self.tag_scheme_name == "iobes":
             for w, t in zip(sentence, tag_sequence):
                 if t == 'B' or t == 'O' or t == 'END' or t == 'S':
@@ -322,4 +323,19 @@ class DataSet(object):
     def pos_ids_to_words(self, pos_ids):
         return [self.id_to_pos[p] for p in pos_ids]
 
+if __name__ == '__main__':
+    pass
+    # sentence = ['START','what', 'is', 'an', 'organization', 'founded', 'by', 'abraham', 'lincoln', 'END']
+    # tag_sequence = ['START','O', 'O', 'O', 'O', 'O', 'O', 'B', 'I', 'END']
+    # entities = []
+    # entity = []
+    #
+    # for w, t in zip(sentence, tag_sequence):
+    #     if t == 'B' or t == 'O' or t == 'END':
+    #         if len(entity) > 0:
+    #             entities.append(' '.join(entity))
+    #             entity = []
+    #     if t == 'B' or t == 'I':
+    #         entity.append(w)
+    # print entities
 

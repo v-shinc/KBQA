@@ -38,25 +38,56 @@ def replace_placeholder(fn_in, fn_out):
                 line = '\t'.join(ll)
                 print >> fout, line.encode('utf8')
 
+def dfs(pattern, sentence, start1, start2, tagged):
+    l1 = len(pattern)
+    l2 = len(sentence)
+    i = start1
+    j = start2
+    while i < l1 and j < l2 and pattern[i] == sentence[j]:
+        tagged.append([sentence[j], 'O'])
+        i += 1
+        j += 1
+    if i == l1 and j == l2:
+        return True
+    elif j == len(sentence) or i == len(pattern):
+        while j > start2:
+            tagged.pop()
+            j -= 1
+        return False
+
+    if pattern[i] == '<$>':
+        tagged.append([sentence[j], 'B'])
+        j += 1
+        i += 1
+        while j < len(sentence):
+            if i >= l1 or pattern[i] != sentence[j]:
+                tagged.append([sentence[j], 'I'])
+                j += 1
+
+            else:
+                if dfs(pattern, sentence, i, j, tagged):
+                    return True
+                tagged.append([sentence[j], 'I'])
+                j += 1
+
+    else:
+        while j > start2:
+            tagged.pop()
+            j -= 1
+        return False
+    return True
 
 def tag_sentence_iob(pattern, sentence):
-
+    tagged = []
+    i = 0
     j = 0
-    tagged = [['<START>', 'START']]
-    for i, w in enumerate(sentence):
-        if j >= len(pattern):
-            tagged.append([w, 'I'])
-        elif w == pattern[j]:
-            j += 1
-            tagged.append([w, 'O'])
-        elif pattern[j] == '<$>' or pattern[j] == "<$>'s":
-            tagged.append([w, 'B'])
-            j += 1
-        else:
-            tagged.append([w, 'I'])
-    tagged.append(['<END>', 'END'])
-    return tagged
-
+    dfs(pattern, sentence, i, j, tagged)
+    if len(tagged) != len(sentence):
+        print pattern
+        print sentence
+        print tagged
+        raise ValueError('')
+    return [['<START>', 'START']] + tagged + [['<END>', 'END']]
 
 def iob_to_iobes(tagged):
     for i in range(len(tagged)):
@@ -80,6 +111,7 @@ def gen_tagged_sentence(fn_list, fn_out, scheme):
             with open(fn_in) as fin:
                 for line in fin:
                     pattern, sentence = line.decode('utf8').strip().split('\t')[-2:]
+                    print line.decode('utf8').strip().split('\t')
                     pattern = pattern.lower().split()
                     sentence = sentence.lower().split()
 
@@ -105,7 +137,7 @@ def gen_tagged_sentence_plus_pos(fn_list, fn_out, scheme):
                     tags = ' '.join([t[1] for t in tagged])
                     sentence = ' '.join(t[0] for t in tagged)
                     pos = ' '.join(pos)
-                    print >> fout, '%s\t%s\t%s\t%s' % (entity, sentence, tags, pos)
+                    print >> fout, ('%s\t%s\t%s\t%s' % (entity, sentence, tags, pos)).encode('utf8')
 
 def gen_word_list(fn_list, fn_out):
     count = dict()
@@ -235,9 +267,9 @@ def gen_webquestion_tag_data():
     fn_wq_test_iobes = '../data/wq.test.complete.v2.iobes'
     fn_wq_train_iobes = '../data/wq.train.complete.v2.iobes'
 
-    # transform_webquestion(fn_wq_test, fn_wq_test_new)
-    transform_webquestion(fn_wq_train, fn_wq_train_new)
-    # transform_webquestion(fn_wq_dev, fn_wq_dev_new)
+    transform_webquestion(fn_wq_test, fn_wq_test_new)
+    # transform_webquestion(fn_wq_train, fn_wq_train_new)
+    transform_webquestion(fn_wq_dev, fn_wq_dev_new)
 
     # gen_tagged_sentence([fn_wq_test_new], fn_wq_test_iob, 'iob')
     # gen_tagged_sentence([fn_wq_train_new, fn_wq_dev_new], fn_wq_train_iob, 'iob')
@@ -332,6 +364,7 @@ def add_pos_feature_one(params):
     index, fn, start, end = params
     lno = 0
     ret = []
+    fix = lambda x: x.replace('-LSB-', '[').replace('-RSB-', ']').replace('-LCB-', '{').replace('-RCB-', '}').replace('-LRB-', '(').replace('-RRB-', ')')
     with open(fn) as fin:
         while lno < start:
             fin.readline()
@@ -346,6 +379,7 @@ def add_pos_feature_one(params):
             sentence = naive_split(sentence)
             line[-2] = ' '.join(pattern)
             tokens, poss = parser.tag_pos(' '.join(sentence))
+            tokens = [fix(t) for t in tokens]
             poss = [u'<START>'] + poss + [u'<END>']
             # line = '\t'.join([w + ' ' + p for w, p in zip(line, poss)])
             line.append(' '.join(poss))
@@ -423,15 +457,15 @@ def gen_pos_data():
     # add_pos_feature(fn_sq_train, fn_sq_train_pos+ '.tmp')
     # add_pos_feature(fn_sq_test, fn_sq_test_pos+'.tmp')
 
-    add_pos_feature(fn_wq_train, fn_wq_train_pos +'.tmp')
+    # add_pos_feature(fn_wq_train, fn_wq_train_pos +'.tmp')
     # add_pos_feature(fn_wq_dev, fn_wq_dev_pos + '.tmp')
     # add_pos_feature(fn_wq_test, fn_wq_test_pos + '.tmp')
 
     gen_tagged_sentence_plus_pos([fn_wq_train_pos +'.tmp', fn_wq_dev_pos +'.tmp'], fn_wq_train_pos_iob, 'iob')
-    # gen_tagged_sentence_plus_pos([fn_wq_test_pos +'.tmp'], fn_wq_test_pos_iob, 'iob')
+    gen_tagged_sentence_plus_pos([fn_wq_test_pos +'.tmp'], fn_wq_test_pos_iob, 'iob')
 
-    # gen_tagged_sentence_plus_pos([fn_sq_train_pos +'.tmp'], fn_sq_train_pos_iob, 'iob')
-    # gen_tagged_sentence_plus_pos([fn_sq_test_pos +'.tmp'], fn_sq_test_pos_iob, 'iob')
+    gen_tagged_sentence_plus_pos([fn_sq_train_pos +'.tmp'], fn_sq_train_pos_iob, 'iob')
+    gen_tagged_sentence_plus_pos([fn_sq_test_pos +'.tmp'], fn_sq_test_pos_iob, 'iob')
 
     merge_file([fn_wq_train_pos_iob, fn_sq_train_pos_iob], fn_train_pos_iob)
     # gen_word_list([fn_sq_train_pos, fn_wq_train_pos], fn_word)
@@ -442,7 +476,8 @@ def gen_pos_data():
 
 if __name__ == '__main__':
     # gen_simple_question_tag_data()
-    gen_webquestion_tag_data()
+    # gen_webquestion_tag_data()
     # merge_data()
     gen_pos_data()
-
+    # print tag_sentence_iob('what <$> language is <$> in', 'what chinese language is waking up in reno in')
+    # print tag_sentence_iob('what types of movie is <$> in netflix'.lower().split(), 'what types of movie is jann arden a work in progress in netflix'.lower().split())
