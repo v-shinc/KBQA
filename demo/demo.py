@@ -1,3 +1,4 @@
+#coding=utf8
 import sys
 sys.path.insert(0, '..')
 from flask import Flask
@@ -52,8 +53,10 @@ class KBQADemo(object):
         @self.app.route('/get_subgraph', methods=['GET', 'POST'])
         def get_subgraph():
             mid = request.args.get('mid')
-            data = []
-            data.append({'name': "chensn"})
+            mid2name = {}
+            nodes = []
+            nodes.append({'category':0, 'name': mid, 'value' : 10, 'label': mid2name[mid]})
+
         # @self.app.route('/t/get_title_nns/', methods=['GET', 'POST'])
         # def get_title_nns():
         #     # query = request.args.get('query', '', type=str)

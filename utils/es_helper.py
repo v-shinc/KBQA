@@ -41,16 +41,29 @@ class EsTemplate(object):
         self.es.indices.delete_mapping(index=self.index, doc_type=self.doc_type)
         self.es.indices.delete(index=self.index)
 
+    def scroll(self, si):
+        res = self.es.scroll(scroll_id=si, scroll='10m')
+        si = res['_scroll_id']
+        res = [r['_source'] for r in res['hits']['hits']]
+        return {'si': si, 'rs': res}
+
+    def search(self, q, size=500, fields="*"):
+        res = self.es.search(index=self.index, doc_type=self.doc_type,
+                             body=q, scroll='10m', search_type='scan', _source_include=fields, size=size)
+        si = res['_scroll_id']
+        ct = res['hits']['total']
+        return {'si': si, 'ct': ct}
+
     def search_iter(self, query, fields, size=500):
-        res  = self.es.search(size=size, q=query, fields=fields)
+        res = self.search(query, size, fields)
         si = res['si']
         ci = res['ci']
 
         while True:
-            res = self.es.scroll(si)
+            res = self.scroll(si)
+            si = res['si']
             if not res['rs']:
                 break
-            si = res['si']
             yield res['rs']
 
 
