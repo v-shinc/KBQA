@@ -49,16 +49,15 @@ class EsTemplate(object):
 
     def search(self, q, size=500, fields="*"):
         res = self.es.search(index=self.index, doc_type=self.doc_type,
-                             body=q, scroll='10m', search_type='scan', _source_include=fields, size=size)
+                             body=q, scroll='10m', search_type='query_then_fetch', _source_include=fields, size=size)
         si = res['_scroll_id']
         ct = res['hits']['total']
-        return {'si': si, 'ct': ct}
+        return {'si': si, 'ct': ct, 'res': [r['_source'] for r in res['hits']['hits']]}
 
-    def search_iter(self, query, fields, size=500):
+    def search_iter(self, query, fields, size=20):
         res = self.search(query, size, fields)
         si = res['si']
-        ci = res['ci']
-
+        yield res['res']
         while True:
             res = self.scroll(si)
             si = res['si']

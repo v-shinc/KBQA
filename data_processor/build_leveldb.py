@@ -116,12 +116,18 @@ def save_dict_to_leveldb(fn_alias, fn_aqqu):
             except KeyError:
                 db.Put(surface.encode('utf8'), ('%s %s' % (mid, score)).encode('utf8'))
 
-def save_freebase_to_leveldb(fn_fb):
-    db = leveldb.LevelDB('../db/freebase.db')
-    with open(fn_fb) as fin:
+def save_mediator_relation_to_leveldb(fn):
+
+    db = leveldb.LevelDB('../db/mediator-relations')
+    with open(fn) as fin:
         for line in fin:
-            subj, pred, objs = line.decode('utf8').split('\t')
-            # objs = objs.split()
+            rel = line.decode('utf8').strip()
+            if  rel.startswith('m.'):
+                continue
+            try:
+                r = db.Get(rel.encode('utf8'))
+            except:
+                db.Put(rel.encode('utf8'))
 
 
 def add_key_to_dict_leveldb(fn_alias, key_fn_list):
@@ -211,7 +217,7 @@ def gen_unsolved_sentence(fn_in, fn_out):
                 res = DBManager.get_candidate_entities(surface, 0.1)
 
                 for e in res:
-                    if e[0] not in candidates or e[1] >  candidates[e[0]]:
+                    if e[0] not in candidates or e[1] > candidates[e[0]]:
                         candidates[e[0]] = e[1]
             if len(candidates) == 0:
                 sentence =[w.split('|')[0]for w in data['tag_res'].split()][1:-1]

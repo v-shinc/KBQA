@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, '..')
 import json
-from tagger.utils import naive_split, normalize_word
+from tagger.string_utils import naive_split, normalize_word
 import globals
 from corenlp_parser.parser import CoreNLPParser
 from corenlp_parser.local_parser import NLPParser

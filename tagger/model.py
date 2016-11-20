@@ -159,7 +159,6 @@ class DeepCRF(object):
         # else:
         #     return outputs
         cell = tf.nn.rnn_cell.GRUCell(rnn_dim)
-        print "[rnn embedded_seq]", embedded_seq.get_shape()
         outputs, state = tf.nn.dynamic_rnn(cell, inputs=embedded_seq, sequence_length=pos_ids, dtype=embedded_seq.dtype)
         if pos_ids != None:
             return state

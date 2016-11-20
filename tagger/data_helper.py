@@ -105,10 +105,15 @@ class DataSet(object):
         return len(self.pos_to_id) if self.pos_to_id else 0
 
     def create_model_input(self, sentence, pos=None):
-        if not sentence.startswith('<START>'):
-            sentence = '<START> ' + sentence + ' <END>'
+        assert self.num_pos == 0 or pos != None
+        if not isinstance(sentence, list):
+            sentence = sentence.split()
+        if sentence[0] != u'<START>':
+            sentence = [u'<START>'] + sentence + [u'<END>']
 
-        sentence = sentence.split()[:self.max_word_len]
+        if pos and not isinstance(pos, list):
+            pos = pos.split()
+        sentence = sentence[:self.max_word_len]
         all_words = []
         all_word_ids = []
         all_char_for_ids = []
@@ -142,7 +147,7 @@ class DataSet(object):
             all_cap_ids.append(self.pad_xx(cap_ids, self.num_cap))
 
         if self.params['pos_dim']:
-            pos_ids = [self.pos_to_id[p] for p in pos.split()]
+            pos_ids = [self.pos_to_id[p] for p in pos]
             all_pos_ids.append(self.pad_xx(pos_ids, self.num_pos))
 
         return {

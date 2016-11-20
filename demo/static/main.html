@@ -9,33 +9,6 @@
         <div class="row">
         <div class="col-md-4"><h3 class="form-signin-heading">KBQA</h3></div>
         </div>
-        <!--<div class="row">-->
-            <!--<div class="col-md-4"><span id=result>&nbsp;</span></div>-->
-        <!--</div>-->
-        <!--<nav class="navbar navbar-default">-->
-            <!--<div class="container-fluid">-->
-
-                <!--<div class="navbar-header">-->
-                    <!--<a class="navbar-brand" href="#">-->
-                        <!--搜索相关性-->
-                    <!--</a>-->
-                <!--</div>-->
-                <!--<div id="navbar">-->
-                    <!--<form class="navbar-form navbar-left">-->
-
-                        <!--<div class="form-group">-->
-                            <!--<input type="text" placeholder="Email" class="form-control" autofocus="autofocus">-->
-                        <!--</div>-->
-
-                        <!--<button type="submit" class="btn btn-success">-->
-                            <!--<span class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>-->
-                        <!--</button>-->
-                        <!--<button type="submit" class="btn btn-default">Query</button>-->
-                        <!--<button type="submit" class="btn btn-default">Title</button>-->
-                    <!--</form>-->
-                <!--</div>-->
-              <!--</div>-->
-        <!--</nav>-->
 
         <form class="row">
             <div class="form-group col-md-4">
@@ -44,13 +17,13 @@
             </div>
 
             <button type="button" class="btn btn-success">
-                <span id="get-mention" class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>
+                <span id="answer" class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>
             </button>
             <span>&nbsp;</span>
 
             <div class="btn-group" role="group" aria-label="...">
-                <button id="query-query" type="button" class="btn btn-default">Query</button>
-                <button id="title-title" type="button" class="btn btn-default">Title</button>
+                <button id="get-mention" type="button" class="btn btn-default">实体词</button>
+                <button id="link-entity" type="button" class="btn btn-default">实体</button>
             </div>
         </form>
 
@@ -58,21 +31,36 @@
         <div class="row">
             <!--<div class="col-md-4"><span>&nbsp;</span></div>-->
         </div>
-        <div>
-            <div class="panel panel-default">
-                <!-- Default panel contents -->
-                <div class="panel-heading" id="result-type">结果</div>
-                <!--<div class="panel-body">-->
-                    <!--<p>...</p>-->
-                <!--</div>-->
-                <!-- Table -->
-                <table class="table">
-                    <thead><tr><td class="col-md-1">#</td><td class="col-md-10">实体词</td></thead>
-                    <tbody id="mention-list">
-                        <tr><td><small>1</small></td><td><small>xxx</small>
-                    </tbody>
-                </table>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <!-- Default panel contents -->
+                    <div class="panel-heading" id="result-type">结果</div>
+                    <!--<div class="panel-body">-->
+                        <!--<p>...</p>-->
+                    <!--</div>-->
+                    <!-- Table -->
+                    <table class="table">
+                        <tbody id="mention-list">
+                            <tr><td><small>1</small></td><td><small>xxx</small>
+                        </tbody>
+                    </table>
+                </div>
             </div>
+            <div class="col-md-6">
+                <div class="panel panel-default">
+                    <!-- Default panel contents -->
+                    <div class="panel-heading" id="link_entity_head">实体链接</div>
+                    <!-- Table -->
+                    <table class="table">
+                        <!--<thead><tr><td class="col-md-1">#</td><td class="col-md-10">实体</td></tr></thead>-->
+                        <tbody id="entity-list">
+                            <tr><td><small>1</small></td><td><small>xxx</small>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
 
         <form class="row">
@@ -145,8 +133,37 @@
                 </table>
             </div>
         </div>
+
+
+        <form class="row">
+            <div class="form-group col-md-4">
+                <input id="subgraph-input" class="form-control" placeholder="主题实体" required name=input-box>
+            </div>
+
+            <button type="button" class="btn btn-success">
+                <span id="get-subgraph" class="glyphicon glyphicon glyphicon-search" aria-hidden="true"></span>
+            </button>
+            <span>&nbsp;</span>
+        </form>
+        <div class="row">
+            <!--<div class="col-md-4"><span>&nbsp;</span></div>-->
+        </div>
+        <div>
+            <div class="panel panel-default">
+                <div class="panel-heading" id="mid-to-subgraph-head">子图</div>
+                <table class="table">
+                    <tbody>
+                        <tr id="subgraph" style="height:400px"> </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </div> <!-- /container -->
     {% block scripts %}
+    <script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
+    <script src="{{ url_for('static', filename='js/echarts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/subgraph.js') }}"></script>
     <script type=text/javascript>
         $(function() {
 
@@ -156,9 +173,23 @@
                 }, function(data) {
                     <!--$("#result-type").text('结果')-->
                     $("#mention-list > tr").remove();
-                    $.each(data, function(i, val){
-                        $line = '<tr><td class="col-md-1">'+i+'</td><td class="col-md-10">' + val + '</td><td class="col-md-1">';
+                    $.each(data, function(key, val){
+                        $line = '<tr><td class="col-md-1">'+key+'</td><td class="col-md-10">' + val + '</td><td class="col-md-1">';
                         $($line).appendTo('#mention-list');
+                    });
+                });
+                return false;
+            });
+
+            $('#link-entity').bind('click', function() {
+                $.getJSON('/link_entity', {
+                    sentence: $('#question-input').val(),
+                }, function(data) {
+
+                    $("#entity-list > tr").remove();
+                    $.each(data, function(key, val){
+                        $line = '<tr><td class="col-md-1">'+key+'</td><td class="col-md-10">' + val + '</td><td class="col-md-1">';
+                        $($line).appendTo('#entity-list');
                     });
                 });
                 return false;

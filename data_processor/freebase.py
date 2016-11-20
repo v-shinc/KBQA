@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, '..')
 
 from utils.es_helper import EsTemplate
-
+import globals
 schema = {
     'id':{
         'type': 'string',
@@ -66,33 +66,48 @@ class EsFreebase(object):
         # must_cond, must_not_cond are dict
         if not must_not_cond:
             must_not_cond = []
-        query = {"query": {
-            "bool": {"must": [must_cond], "must_not": must_not_cond}}}
+        query = {
+            "query": {
+                "bool": {
+                    "must": must_cond,
+                    "must_not": must_not_cond
+                }
+            }
+        }
         ret = []
-        for rows in self.es.search_iter(query, fields=['subject', 'relation', 'object']):
+        for rows in self.es.search_iter(query, '*'):
             ret.extend(rows)
         return ret
 
 class FreebaseHelper(object):
     def __init__(self):
-       self.esfreebase = EsFreebase()
+        self.esfreebase = EsFreebase()
+        self.mediate_relations = set()
+        conf = globals.read_configuration('../config.cfg')
+        mediator_filename = conf.get('FREEBASE', 'mediator-relations')
+        with open(mediator_filename) as fin:
+            for line in fin:
+                rel = line.decode('utf8').strip()
+                if rel.startswith('m.'):
+                    continue
+                self.mediate_relations.add(rel)
 
     def is_mediate_relation(self, rel):
-        return True
+        return rel in self.mediate_relations
 
     def get_subgraph(self, mid):
-        first_hops = self.esfreebase.get_triples({'subject': mid})
+        first_hops = self.esfreebase.get_triples([{'term':{'subject': mid}}])
         subgraph = []
         for t1 in first_hops:
             rel = t1['relation']
             if self.is_mediate_relation(rel):
-                subgraph.append([t1['subject'], t1['relation'], t1['object'], 0])
-                second_hops = self.esfreebase.get_triples({'subject': t1['object']})
-                for t2 in second_hops:
-                    subgraph.append([t2['subject'], t2['relation'], t2['object'], 1])
-            else:
                 subgraph.append([t1['subject'], t1['relation'], t1['object'], 1])
-        return subgraph
+                second_hops = self.esfreebase.get_triples([{'term':{'subject': t1['object']}}])
+                for t2 in second_hops:
+                    subgraph.append([t2['subject'], t2['relation'], t2['object'], 2])
+            else:
+                subgraph.append([t1['subject'], t1['relation'], t1['object'], 0])
+        return subgraph[:20]
     
 
 if __name__ == '__main__':
