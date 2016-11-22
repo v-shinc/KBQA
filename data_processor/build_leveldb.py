@@ -241,7 +241,7 @@ def gen_unsolved_sentence(fn_in, fn_out):
                                 s = ''.join(surface[i:i+j])
                                 res = DBManager.get_candidate_entities(s, 0.1)
                                 for e in res:
-                                    if e[1] < 1.1 and (e[0] not in candidates or e[1] > candidates[e[0]]):
+                                    if (e[0] not in candidates or e[1] > candidates[e[0]]):
                                         candidates[e[0]] = e[1]
                                 found = len(res) > 0
             # candidates = sorted(candidates.items(), key=lambda x:x[1], reverse=True)[:20]
@@ -253,6 +253,7 @@ def gen_unsolved_sentence(fn_in, fn_out):
                     num += 1
                     correct = True
                     break
+            print >> fout, ("%s\t%s" % (gold_entity, ' '.join([c for c, _ in candidates]))).encode('utf8')
             if not correct:
                 # print >> fout, line.strip(), candidates
                 print surfaces, data['gold'].split('\t'), gold_entity

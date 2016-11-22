@@ -143,8 +143,8 @@ class EntityLinker(object):
         candidate_to_mention = dict()
         for surface in res['mentions']:
             surface_ = surface.lower().replace(' ', '')
-            res = DBManager.get_candidate_entities(surface_, 0.1)
-            for e in res:
+            enity_res = DBManager.get_candidate_entities(surface_, 0.1)
+            for e in enity_res:
                 if e[1] >= 1.1:
                     continue
                 if e[0] not in candidate_to_score or e[1] > candidate_to_score[e[0]]:
