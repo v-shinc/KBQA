@@ -41,7 +41,6 @@ class DeepCRF(object):
                 word_embedding = tf.get_variable('word_embedding', [num_word, word_dim], initializer=initializer)
                 word_embedded = tf.nn.embedding_lookup(word_embedding, self.word_ids, name="word_layer")
                 inputs.append(word_embedded)
-                print word_embedded.get_shape()
                 input_dim += word_dim
             if char_dim:
                 char_embedding = tf.get_variable('char_embedding', [num_char, char_dim], initializer=initializer)
