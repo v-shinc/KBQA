@@ -1,4 +1,5 @@
 import numpy as np
+import heapq
 # def viterbi_decode_top3(score, transition_params):
 #     trellis = [np.zeros_like(score) for _ in range(3)]
 #     num_tags = transition_params.shape[0]
@@ -57,9 +58,34 @@ import numpy as np
 #
 #     return viterbi, [score0, score1, score2]
 
-def viterbi_decode_top2(score, transition_params):
-    print '[viterbi_decode_top2]', score
-    print '[viterbi_decode_top2]', transition_params
+def viterbi_decode(score, transition_params):
+    """Decode the highest scoring sequence of tags outside of TensorFlow.
+    This should only be used at test time.
+    Args:
+      score: A [seq_len, num_tags] matrix of unary potentials.
+      transition_params: A [num_tags, num_tags] matrix of binary potentials.
+    Returns:
+      viterbi: A [seq_len] list of integers containing the highest scoring tag
+          indicies.
+      viterbi_score: A float containing the score for the Viterbi sequence.
+    """
+    trellis = np.zeros_like(score)
+    backpointers = np.zeros_like(score, dtype=np.int32)
+    trellis[0] = score[0]
+    for t in range(1, score.shape[0]):
+        v = np.expand_dims(trellis[t - 1], 1) + transition_params
+        trellis[t] = score[t] + np.max(v, 0)
+        backpointers[t] = np.argmax(v, 0)
+
+    viterbi = [np.argmax(trellis[-1])]
+    for bp in reversed(backpointers[1:]):
+        viterbi.append(bp[viterbi[-1]])
+    viterbi.reverse()
+
+    viterbi_score = np.max(trellis[-1])
+    return viterbi, viterbi_score
+
+def viterbi_decode_top_2(score, transition_params):
     N = 2
     dp = [np.zeros_like(score) for _ in range(N)]   # dp[]
     num_tags = transition_params.shape[0]
@@ -67,11 +93,13 @@ def viterbi_decode_top2(score, transition_params):
     backkth = [np.zeros_like(score, dtype=np.int32) for _ in range(N)]
     for j in range(num_tags):
         dp[0][0, j] = score[0, j]
-        dp[1][0, j] = -9999999
+        dp[1][0, j] = -np.inf
         # trellis[2][0, j] = -100
 
     for t in range(1, score.shape[0]):
         for j in range(num_tags):
+            dp[0][t, j] = -np.inf
+            dp[1][t, j] = -np.inf
             for k in range(num_tags):
                 for p in range(N):
                     v = dp[p][t-1, k] + transition_params[k, j] + score[t, j]
@@ -86,7 +114,7 @@ def viterbi_decode_top2(score, transition_params):
 
     viterbi = [[100] for _ in range(N)]  # 100 is randomly chosen
     kth = [[4] for _ in range(N)]
-    score0, score1, score2 = 0, 0, 0
+    score0, score1 = -np.inf, -np.inf
 
     for k in range(N):
         for j in range(num_tags):
@@ -108,6 +136,56 @@ def viterbi_decode_top2(score, transition_params):
         viterbi[i].reverse()
 
     return viterbi, [score0, score1]
+
+def viterbi_decode_top_k(score, transition_params, k):
+    dp = [np.zeros_like(score) for _ in range(k)]
+    num_tags = transition_params.shape[0]
+    backpointers = [np.zeros_like(score, dtype=np.int32) for _ in range(k)]
+    previous_ranks = [np.zeros_like(score, dtype=np.int32) for _ in range(k)]
+
+    for j in range(num_tags):
+        dp[0][0, j] = score[0, j]
+        for i in range(1, k):
+            dp[i][0, j] = - np.inf
+
+    for t in range(1, score.shape[0]):
+        for j in range(num_tags):
+            pq = []  # min-heap
+            for i in range(num_tags):
+                for p in range(k):
+                    v = dp[p][t - 1, i] + transition_params[i, j] + score[t, j]
+
+                    if len(pq) < k:
+                        heapq.heappush(pq, [v, i, p])  # value, previous_tag, previous_rank
+                    elif v > pq[0][0]:
+                        heapq.heapreplace(pq, [v, i, p])
+
+            for i in range(k-1, -1, -1):
+                dp[i][t, j], backpointers[i][t, j], previous_ranks[i][t, j] = heapq.heappop(pq)
+
+
+    viterbi = [[100] for _ in range(k)]  # 100 is randomly chosen
+    ranks = [[4] for _ in range(k)]
+    scores = [-np.inf for _ in range(k)]
+
+    pq = []
+    for i in range(k):
+        for j in range(num_tags):
+            if len(pq) < k:
+                heapq.heappush(pq, [dp[i][-1, j], j, i]) # value, tag, rank
+            elif dp[i][-1, j] > pq[0][0]:
+                heapq.heapreplace(pq, [dp[i][-1, j], j, i])
+    for i in range(k-1, -1, -1):
+        scores[i], viterbi[i][0], ranks[i][0] = heapq.heappop(pq)
+
+    for i in range(k):
+        for t in reversed(range(1, score.shape[0])):
+            v = viterbi[i][-1]
+            r = ranks[i][-1]
+            viterbi[i].append(backpointers[r][t, v])
+            ranks[i].append(previous_ranks[r][t, v])
+        viterbi[i].reverse()
+    return viterbi, scores
 
 if __name__ == '__main__':
     # score = np.array([[1, 2], [3, 1], [1, 2]])
@@ -134,7 +212,21 @@ if __name__ == '__main__':
    -3.26884091e-01],
  [ -1.03669369e+00,  -1.20541072e+00,   7.40161049e-04,   4.77745742e-01,
    -1.76283944e+00]])
-    seq, scores = viterbi_decode_top2(score, transition_params)
+    seq, scores = viterbi_decode_top_2(score, transition_params)
     print seq
     print scores
 
+    seq, scores = viterbi_decode(score, transition_params)
+    print seq
+    print scores
+
+    seq, scores = viterbi_decode_top_k(score, transition_params, 3)
+    print seq
+    print scores
+    #
+    # pq = []
+    # heapq.heappush(pq, [3, 1])
+    # heapq.heappush(pq, [2, 3])
+    # heapq.heappush(pq, [4, 2])
+    # while len(pq) > 0:
+    #     print heapq.heappop(pq)
