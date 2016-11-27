@@ -285,42 +285,32 @@ def viterbi_decode(score, transition_params):
 
 
 def viterbi_decode_top2(score, transition_params):
+    print '[viterbi_decode_top2]', score
+    print '[viterbi_decode_top2]', transition_params
     N = 2
-    trellis = [np.zeros_like(score) for _ in range(N)]
+    dp = [np.zeros_like(score) for _ in range(N)]
     num_tags = transition_params.shape[0]
     backpointers = [np.zeros_like(score, dtype=np.int32) for _ in range(N)]
     backkth = [np.zeros_like(score, dtype=np.int32) for _ in range(N)]
     for j in range(num_tags):
-        trellis[0][0, j] = score[0, j]
-        trellis[1][0, j] = -10
+        dp[0][0, j] = score[0, j]
+        dp[1][0, j] = -10
         # trellis[2][0, j] = -100
 
     for t in range(1, score.shape[0]):
         for j in range(num_tags):
             for k in range(num_tags):
                 for p in range(N):
-                    v = trellis[p][t-1, k] + transition_params[k, j] + score[t, j]
-                    if v > trellis[0][t, j]:
-                        trellis[0][t, j], trellis[1][t, j] = v, trellis[0][t, j]
+                    v = dp[p][t-1, k] + transition_params[k, j] + score[t, j]
+                    if v > dp[0][t, j]:
+                        dp[0][t, j], dp[1][t, j] = v, dp[0][t, j]
                         backpointers[0][t, j], backpointers[1][t, j] = k, backpointers[0][t, j]
                         backkth[0][t, j], backkth[1][t, j] = p, backkth[0][t, j]
-                    elif v > trellis[1][t, j]:
-                        trellis[1][t, j] = v
+                    elif v > dp[1][t, j]:
+                        dp[1][t, j] = v
                         backpointers[1][t, j] = k
                         backkth[1][t, j] = p
 
-                    # if v > trellis[0][t, j]:
-                    #     trellis[0][t, j], trellis[1][t, j], trellis[2][t, j] = v, trellis[0][t, j], trellis[1][t, j]
-                    #     backpointers[0][t, j], backpointers[1][t, j], backpointers[2][t, j] = k, backpointers[0][t, j], backpointers[1][t, j]
-                    #     backkth[0][t, j], backkth[1][t, j], backkth[2][t, j] = p, backkth[0][t, j], backkth[1][t, j]
-                    # elif v > trellis[1][t, j]:
-                    #     trellis[1][t, j], trellis[2][t, j] = v, trellis[1][t, j]
-                    #     backpointers[1][t, j], backpointers[2][t, j] = k, backpointers[1][t, j]
-                    #     backkth[1][t, j], backkth[2][t, j] = p, backkth[1][t, j]
-                    # elif v > trellis[2][t, j]:
-                    #     trellis[2][t,j] = v
-                    #     backpointers[2][t, j] = k
-                    #     backkth[2][t, j] = p
 
     viterbi = [[100] for _ in range(N)] # 100 is randomly chosen
     kth = [[4] for _ in range(N)]
@@ -328,27 +318,15 @@ def viterbi_decode_top2(score, transition_params):
 
     for k in range(N):
         for j in range(num_tags):
-            if trellis[k][-1, j] > score0:
+            if dp[k][-1, j] > score0:
                 viterbi[0][-1], viterbi[1][-1] = j, viterbi[0][-1]
                 kth[0][-1], kth[1][-1] = k, kth[0][-1]
-                score0 = trellis[k][-1, j]
-            elif trellis[k][-1, j] > score1:
+                score0 = dp[k][-1, j]
+            elif dp[k][-1, j] > score1:
                 viterbi[1][-1] = j
                 kth[1][-1] = k
-                score1 = trellis[k][-1, j]
+                score1 = dp[k][-1, j]
 
-            # if trellis[k][-1, j] > score0:
-            #     viterbi[0][-1], viterbi[1][-1], viterbi[2][-1] = j, viterbi[0][-1], viterbi[1][-1]
-            #     kth[0][-1], kth[1][-1], kth[2][-1] = k, kth[0][-1], kth[1][-1]
-            #     score0 = trellis[k][-1, j]
-            # elif trellis[k][-1, j] > score1:
-            #     viterbi[1][-1], viterbi[2][-1] = j, viterbi[1][-1]
-            #     kth[1][-1], kth[2][-1] = k, kth[1][-1]
-            #     score1 = trellis[k][-1, j]
-            # elif trellis[k][-1, j] > score2:
-            #     viterbi[2][-1] = j
-            #     kth[2][-1] = k
-            #     score2 = trellis[k][-1, j]
     for i in range(N):
         for t in reversed(range(1, score.shape[0])):
             v = viterbi[i][-1]

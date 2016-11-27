@@ -12,8 +12,8 @@ import globals
 
 static_path = 'static'
 
-class KBQADemo(object):
 
+class KBQADemo(object):
     def __init__(self, dir_path):
         self.app = Flask(__name__, template_folder=static_path, static_folder=static_path)
         self.bootstrap = Bootstrap(self.app)
@@ -31,19 +31,19 @@ class KBQADemo(object):
             sentence = request.args.get('sentence')
             print sentence
             res = self.tagger.tag(sentence)
+            res['mentions'] = '<br>'.join(['(%s, %s)' % (m, s) for m, s in res['mentions'].items()])
             return json.dumps(res)
-
 
         @self.app.route('/link_entity', methods=['GET', 'POS'])
         def link_entity():
             sentence = request.args.get('sentence')
             print '[link entity]', sentence
-            entity_to_mention, entity_to_score = self.entity_linker.get_candidate_topic_entities(sentence)
+            sentence, candidates = self.entity_linker.get_candidate_topic_entities(sentence)
+            print candidates
             res = []
-            for e in entity_to_mention.keys():
-                res.append(e + ' (' + entity_to_mention[e] + ', ' + str(entity_to_score[e]) + ')')
+            for mid, feat in candidates.items():
+                res.append('{}: ({}, {}, {})'.format(mid, feat['mention'], feat['entity_score'], feat['mention_score']))
             return json.dumps({'candidates': '<br>'.join(res)})
-
 
         @self.app.route('/mid_to_name', methods=['GET', 'POST'])
         def get_name_by_mid():

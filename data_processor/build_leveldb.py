@@ -220,10 +220,10 @@ def gen_unsolved_sentence(fn_in, fn_out):
                     if e[0] not in candidates or e[1] > candidates[e[0]]:
                         candidates[e[0]] = e[1]
             if len(candidates) == 0:
-                sentence =[w.split('|')[0]for w in data['tag_res'].split()][1:-1]
+                sentence = [w.split('|')[0]for w in data['tag_res'].split()][1:-1]
                 all_pos = data['pos'][1:-1]
-                #use ngram of surface
 
+                # use ngram of surface
                 for surface in surfaces:
                     surface = surface.lower().split()
                     if len(surface) == 0:
@@ -243,7 +243,7 @@ def gen_unsolved_sentence(fn_in, fn_out):
                                 for e in res:
                                     if (e[0] not in candidates or e[1] > candidates[e[0]]):
                                         candidates[e[0]] = e[1]
-                                found = len(res) > 0
+                            found = len(res) > 0
             # candidates = sorted(candidates.items(), key=lambda x:x[1], reverse=True)[:20]
             candidates = candidates.items()
             correct = False
