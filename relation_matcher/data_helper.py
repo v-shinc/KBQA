@@ -33,7 +33,11 @@ class DataSet:
         self.word_based = False
         if 'word_dim' in params['question_config']:
             self.word_based = True
-            self.word_to_id, self.id_word = load_mapping(params['fn_word'])
+            self.word_to_id, self.id_to_word = load_mapping(params['fn_word'])
+            if '<$>' not in self.word_to_id:
+                index = len(self.word_to_id)
+                self.word_to_id['<$>'] = index
+                self.id_to_word[index] = '<$>'
             self.word_padding = len(self.word_to_id)
 
         self.char_based = False
@@ -50,15 +54,50 @@ class DataSet:
 
     @property
     def num_word(self):
-        return len(self.word_to_id) if self.word_based else 0
+        return len(self.word_to_id) + 1 if self.word_based else 0
 
     @property
     def num_char(self):
-        return len(self.char_to_id) if self.char_based else 0
+        return len(self.char_to_id) + 1 if self.char_based else 0
 
     @property
     def num_relation(self):
         return len(self.sub_relation_to_id)
+
+    def create_model_input(self, patterns, relations):
+        all_word_ids = []
+        all_char_ids = []
+        all_word_lengths = []
+        all_sentence_lengths = []
+        all_relations = []
+        all_relation_ids = []
+
+        for pattern, relation in zip(patterns, relations):
+            pattern = pattern.split()[:self.max_sentence_len]
+            if self.word_based:
+                pattern_ids = [self.word_to_id[w] for w in pattern if w in self.word_to_id]
+                if len(pattern_ids) == 0:
+                    raise ValueError('len(pattern_ids) == 0')
+                all_word_ids.append(self.pad_words(pattern_ids, self.word_padding))
+            all_sentence_lengths.append(len(pattern))
+            if self.char_based:
+                char_ids = [[self.char_to_id[c] for c in w if self.char_to_id]
+                            for w in pattern]
+                char_ids, word_lengths = self.pad_chars(char_ids)
+                all_char_ids.append(char_ids)
+                all_word_lengths.append(word_lengths)
+
+            all_relations.append(relation)
+            all_relation_ids.append([self.sub_relation_to_id[r] for r in relation.split('.')])
+        ret = {
+            "word_ids": all_word_ids,
+            "sentence_lengths": all_sentence_lengths,
+            "char_ids": all_char_ids,
+            "word_lengths": all_word_lengths,
+            "relation_ids": all_relation_ids,
+            "relations": all_relations
+        }
+        return ret
 
     def test_iterator(self, fn_dev):
         with open(fn_dev) as fin:
@@ -69,13 +108,16 @@ class DataSet:
                 all_word_lengths = []
                 all_relations = []
                 all_relation_ids = []
+
                 data = json.loads(line, encoding='utf8')
 
+                # handle positive relation
                 for pos_rel in data['pos_relation']:
                     all_relations.append(pos_rel)
                     all_relation_ids.append([self.sub_relation_to_id[r] for r in pos_rel.split('.')])
                 num_pos = len(data['pos_relation'])
 
+                # handle negative relation
                 if 'neg_relation' in data and len(data['neg_relation']) > 0:
                     for neg_rel in data['neg_relation']:
                         all_relations.append(neg_rel)
@@ -85,6 +127,7 @@ class DataSet:
                         all_relations.append(neg_rel)
                         all_relation_ids.append([self.sub_relation_to_id[r] for r in neg_rel.split('.')])
 
+                # handle question
                 str_words = data['question'].split()[:self.max_sentence_len]
                 if self.word_based:
                     word_ids = [self.word_to_id[w] for w in str_words if w in self.word_to_id]
@@ -92,6 +135,7 @@ class DataSet:
                         raise ValueError('len(word_ids) == 0')
                     all_word_ids = [self.pad_words(word_ids, self.word_padding)] * len(all_relation_ids)
                 all_sentence_lengths = [len(str_words)] * len(all_relation_ids)
+
                 if self.char_based:
                     char_ids = [[self.char_to_id[c] for c in w if self.char_to_id]
                                 for w in str_words]
@@ -191,5 +235,3 @@ class DataSet:
     def pad_words(self, seq, padding):
         seq = seq[:self.max_sentence_len]
         return seq + [padding] * (self.max_sentence_len - len(seq))
-
-

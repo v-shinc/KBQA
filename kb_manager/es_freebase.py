@@ -79,7 +79,8 @@ class EsFreebase(object):
             ret.extend(rows)
         return ret
 
-class FreebaseHelper(object):
+
+class EsFreebaseHelper(object):
     def __init__(self):
         self.esfreebase = EsFreebase()
         self.mediate_relations = set()

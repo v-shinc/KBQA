@@ -5,7 +5,7 @@ import sys
 import tensorflow as tf
 from time import time
 from data_helper import DataSet
-from model import RelationMatcher
+from model import RelationMatcherModel
 from evaluete import evaluate
 import model_config
 flags = tf.flags
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     config['relation_config']['num_word'] = dataset.num_relation
     config['relation_config']['num_char'] = dataset.num_char
 
-    model = RelationMatcher(config)
+    model = RelationMatcherModel(config)
 
     fout_log = open(log_path, 'a')
     with open(config_path, 'w') as fout:

@@ -84,7 +84,6 @@ if __name__ == '__main__':
     parameters['num_tag'] = dataset.num_tag
     parameters['num_pos'] = dataset.num_pos
 
-
     model = DeepCRF(
         FLAGS.max_sentence_len,
         FLAGS.max_word_len,

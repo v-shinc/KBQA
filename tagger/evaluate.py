@@ -39,7 +39,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
             sys.stdout.write("Process to %d\r" % lno)
             sys.stdout.flush()
         lno += batch_size
-        viterbi_sequences = model.predict(
+        viterbi_sequences, _ = model.predict(
             data['sentence_lengths'],
             data['word_ids'],
             data['char_for_ids'],
@@ -54,12 +54,12 @@ def evaluate(dataset, model, fn_dev, fn_res):
             seq_len = data['sentence_lengths'][i]
             y_ = data['tag_ids'][i][:seq_len]
             words = data['words'][i][:seq_len]
-            gold_entities, gold_tag_sequence = dataset.get_named_entity_from_words(words, y_)
+            gold_entities, gold_tag_sequence = dataset.get_mention_from_words(words, y_)
             correct_labels += np.sum(np.equal(viterbi_sequences[i], y_))
             total_labels += seq_len
 
             viterbi_sequence_ = viterbi_sequences[i]
-            pred_entities, pred_tag_sequence = dataset.get_named_entity_from_words(words, viterbi_sequence_)
+            pred_entities, pred_tag_sequence = dataset.get_mention_from_words(words, viterbi_sequence_)
             precision, recall, f1 = compute_f1(gold_entities, pred_entities)
             avg_precision += precision
             avg_recall += recall
@@ -68,13 +68,15 @@ def evaluate(dataset, model, fn_dev, fn_res):
             if res_file:
                 tag_res = " ".join(["%s|%s|%s" % (w, p, g) for w, p, g in
                                     zip(words, gold_tag_sequence, pred_tag_sequence)])
-                print >> res_file, json.dumps(
-                    {'tag_res': tag_res,
-                     'gold': "\t".join(gold_entities),
-                     'predict': "\t".join(pred_entities),
-                     'entity': data['entities'][i],
-                     'pos': dataset.pos_ids_to_words(data['pos_ids'][i][:seq_len])
-                     }, encoding='utf8', )
+                result = {
+                    'tag_res': tag_res,
+                    'gold': "\t".join(gold_entities),
+                    'predict': "\t".join(pred_entities),
+                    'entity': data['entities'][i],
+                 }
+                if len(data['pos_ids']) > 0:
+                    result['pos'] = dataset.pos_ids_to_words(data['pos_ids'][i][:seq_len])
+                print >> res_file, json.dumps(result, encoding='utf8', )
 
     accuracy = 100 * correct_labels / float(total_labels)
     avg_f1 /= num
@@ -94,7 +96,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
     return accuracy, avg_precision, avg_recall, avg_f1, new_f1, res_info
 
 
-def evaluate_top2(dataset, model, fn_dev, fn_res):
+def evaluate_top_2(dataset, model, fn_dev, fn_res):
     lno = 0
     correct_labels = 0
     total_labels = 0
@@ -111,7 +113,7 @@ def evaluate_top2(dataset, model, fn_dev, fn_res):
             sys.stdout.write("Process to %d\r" % lno)
             sys.stdout.flush()
         lno += batch_size
-        batch_viterbi_sequences, batch_scores = model.predict_topk(
+        batch_viterbi_sequences, batch_scores = model.predict_top_k(
             data['sentence_lengths'],
             data['word_ids'],
             data['char_for_ids'],
@@ -126,7 +128,7 @@ def evaluate_top2(dataset, model, fn_dev, fn_res):
             seq_len = data['sentence_lengths'][i]
             y_ = data['tag_ids'][i][:seq_len]
             words = data['words'][i][:seq_len]
-            gold_entities, gold_tag_sequence = dataset.get_named_entity_from_words(words, y_)
+            gold_entities, gold_tag_sequence = dataset.get_mention_from_words(words, y_)
             correct_labels += np.sum(np.equal(batch_viterbi_sequences[i][0], y_))
             total_labels += seq_len
 
@@ -136,7 +138,7 @@ def evaluate_top2(dataset, model, fn_dev, fn_res):
                 if k == 1 and batch_scores[i][1] * 1.0 / batch_scores[i][0] < 0.95:
                     break
                 viterbi_sequence_ = batch_viterbi_sequences[i][k]
-                pred_entities, pred_tag_sequence = dataset.get_named_entity_from_words(words, viterbi_sequence_)
+                pred_entities, pred_tag_sequence = dataset.get_mention_from_words(words, viterbi_sequence_)
                 all_pred_entities.update(pred_entities)
                 all_pred_tag_sequence.append(pred_tag_sequence)
             precision, recall, f1 = compute_f1(gold_entities, all_pred_entities)
@@ -154,7 +156,6 @@ def evaluate_top2(dataset, model, fn_dev, fn_res):
                      'entity': data['entities'][i],
                      'pos': dataset.pos_ids_to_words(data['pos_ids'][i][:seq_len])
                      }, encoding='utf8',)
-
 
     accuracy = 100 * correct_labels / float(total_labels)
     avg_f1 /= num
@@ -206,4 +207,4 @@ if __name__ == '__main__':
         parameters['num_tag']
     )
     fn_res = os.path.join(dir_path, res_name)
-    evaluate(dataset, model, fn_dev, fn_res)
+    evaluate_top_2(dataset, model, fn_dev, fn_res)

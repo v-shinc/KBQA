@@ -60,7 +60,7 @@ class RNNEncoder:
                     _, char_state = self.rnn_layer(char_embedded, self.char_rnn_dim, word_lengths, self.char_bidirect)
 
                     char_rnn_dim_ = self.char_rnn_dim * (2 if self.char_bidirect else 1)
-                    char_out = tf.reshape(char_state, [-1, max_seq_len, char_rnn_dim_])
+                    char_out = tf.reshape(char_state, tf.pack([-1, max_seq_len, char_rnn_dim_]))
                     inputs.append(char_out)
                     input_dim += char_rnn_dim_
             if self.word_rnn_dim:
@@ -113,12 +113,13 @@ class CNNEncoder:
                         padding="VALID",
                         name="conv"
                     )
-                    h = tf.nn.sigmoid(tf.nn.bias_add(conv, b), name='sigmoid')
+                    h = tf.nn.tanh(tf.nn.bias_add(conv, b), name='sigmoid')
                     pooled = tf.nn.max_pool(
                         h,
                         ksize=[1, sequence_len - filter_size + 1, 1, 1],
                         strides=[1, 1, 1, 1],
-                        padding='VALID'
+                        padding='VALID',
+                        name='pool'
                     )
                     pooled_outputs.append(pooled)
 
@@ -159,12 +160,46 @@ class AdditionEncoder:
         with tf.variable_scope(scope):
             self.embeddings = tf.get_variable('word_embedding', [params['num_word'], params['word_dim']], initializer=initializer)
 
-    def encode(self, input_ids):
+    @staticmethod
+    def sequence_mask(lengths, maxlen=None, dtype=tf.bool, name=None):
+        """Same as sequence_mask in version 1.1
+        """
+        with tf.name_scope(name or "SequenceMask"):
+            lengths = tf.convert_to_tensor(lengths)
+            if lengths.get_shape().ndims != 1:
+                raise ValueError("lengths must be 1D for sequence_mask")
+
+            if maxlen is None:
+                maxlen = tf.max(lengths, [0])
+            else:
+                maxlen = tf.convert_to_tensor(maxlen)
+            if maxlen.get_shape().ndims != 0:
+                raise ValueError("maxlen must be scalar for sequence_mask")
+
+            # The basic idea is to compare a range row vector of size maxlen:
+            # [0, 1, 2, 3, 4]
+            # to length as a matrix with 1 column: [[1], [3], [2]].
+            # Because of broadcasting on both arguments this comparison results
+            # in a matrix of size (len(lengths), maxlen)
+            result = tf.range(0, maxlen, 1) < tf.expand_dims(lengths, 1)
+            if dtype is None or result.dtype.base_dtype == dtype.base_dtype:
+                return result
+            else:
+                return tf.cast(result, dtype)
+
+    def encode(self, input_ids, lengths, reuse=False):
         # with tf.variable_scope(self.scope):
-        return tf.reduce_sum(tf.nn.embedding_lookup(self.embeddings, input_ids), reduction_indices=1)
+        max_length = input_ids.get_shape()[1]
+
+        if lengths != None:
+            mask = self.sequence_mask(tf.to_int32(lengths), max_length, dtype=tf.float32)   # [batch_size, sentence_length]
+            mask = tf.expand_dims(mask, -1)
+            return tf.reduce_sum((tf.nn.embedding_lookup(self.embeddings, input_ids) * mask), reduction_indices=1)
+        else:
+            return tf.reduce_sum(tf.nn.embedding_lookup(self.embeddings, input_ids), reduction_indices=1)
 
 
-class RelationMatcher:
+class RelationMatcherModel:
     def __init__(self, params):
         self.pos_relation_ids = tf.placeholder(tf.int32, [None, 3])
         self.neg_relation_ids = tf.placeholder(tf.int32, [None, 3])
@@ -176,36 +211,37 @@ class RelationMatcher:
 
         if params['encode_name'] == 'CNN':
             question_encoder = CNNEncoder(params['question_config'], 'question_cnn')
-            relation_encoder = CNNEncoder(params['relation_config'], 'relation_cnn')
-            # relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
+            # relation_encoder = CNNEncoder(params['relation_config'], 'relation_cnn')
+            relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
             if 'char_dim' in params['question_config']:
                 question = question_encoder.encode(self.q_char_ids)
             else:
                 question = question_encoder.encode(self.q_word_ids)
-            pos_relation = relation_encoder.encode(self.pos_relation_ids, False)
-            neg_relation = relation_encoder.encode(self.neg_relation_ids, True)
+            pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
+            neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
 
         elif params['encode_name'] == 'ADD':
             question_encoder = AdditionEncoder(params['question_config'], 'question_add')
             relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
-            question = question_encoder.encode(self.q_word_ids)
-            pos_relation = relation_encoder.encode(self.pos_relation_ids)
-            neg_relation = relation_encoder.encode(self.neg_relation_ids)
+            question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
+            pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
+            neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
         elif params['encode_name'] == 'RNN':
             question_encoder = RNNEncoder(params['question_config'], 'question_rnn')
-            relation_encoder = RNNEncoder(params['relation_config'], 'relation_add')
+            # relation_encoder = RNNEncoder(params['relation_config'], 'relation_rnn')
+            relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
             question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths, self.q_char_ids, self.q_word_lengths, False)
-            pos_relation = relation_encoder.encode(self.pos_relation_ids, None, None, None, False)
-            neg_relation = relation_encoder.encode(self.neg_relation_ids, None, None, None, True)
+            pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
+            neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
         else:
             raise ValueError('encoder_name should be one of [CNN, ADD, RNN]')
 
-        question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
-        pos_relation_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
+        self.question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
+        self.pos_relation_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
         neg_relation_drop = tf.nn.dropout(neg_relation, self.dropout_keep_prob)
-        self.pos_sim = self.sim(question_drop, pos_relation_drop)
-        neg_sim = self.sim(question_drop, neg_relation_drop)
-        self.loss = tf.reduce_mean(tf.maximum(0., neg_sim + params['margin'] - self.pos_sim))
+        self.pos_sim = self.sim(self.question_drop, self.pos_relation_drop)
+        neg_sim = self.sim(self.question_drop, neg_relation_drop)
+        self.loss = tf.reduce_sum(tf.maximum(0., neg_sim + params['margin'] - self.pos_sim))
         tvars = tf.trainable_variables()
         max_grad_norm = 5
         self.grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
@@ -216,7 +252,7 @@ class RelationMatcher:
         config.gpu_options.allow_growth = True
         config.allow_soft_placement = True
         config.log_device_placement = False
-        self.session = tf.InteractiveSession(config=config)
+        self.session = tf.Session(config=config)
         self.saver = tf.train.Saver(tf.all_variables(), max_to_keep=1)
         if params['load_path']:
             self.saver.restore(self.session, params['load_path'])
@@ -231,7 +267,8 @@ class RelationMatcher:
         sqrt_u = tf.sqrt(tf.reduce_sum(u ** 2, 1))
         sqrt_v = tf.sqrt(tf.reduce_sum(v ** 2, 1))
         epsilon = 1e-5
-        cosine = dot / (tf.maximum(sqrt_u * sqrt_v, epsilon))
+        cosine = dot / (sqrt_u * sqrt_v)
+        # cosine = dot / (tf.maximum(sqrt_u * sqrt_v, epsilon))
         # cosine = tf.maximum(dot / (tf.maximum(sqrt_u * sqrt_v, epsilon)), epsilon)
         return cosine
 
@@ -264,7 +301,8 @@ class RelationMatcher:
                 question_sentence_lengths,
                 question_char_ids,
                 question_char_lengths,
-                relation_ids):
+                relation_ids,
+                include_repr=False):
         feed_dict = dict()
         if 'word_dim' in self.params['question_config']:
             feed_dict[self.q_word_ids] = question_word_ids
@@ -276,11 +314,38 @@ class RelationMatcher:
 
         feed_dict[self.dropout_keep_prob] = 1
         feed_dict[self.pos_relation_ids] = relation_ids
-        sim = self.session.run(self.pos_sim, feed_dict)
-        return sim
+
+        if include_repr:
+            return self.session.run([self.pos_sim, self.question_drop, self.pos_relation_drop], feed_dict)
+        else:
+            return self.session.run(self.pos_sim, feed_dict)
+
+    def get_question_repr(self,
+                          question_word_ids,
+                          question_sentence_lengths,
+                          question_char_ids,
+                          question_char_lengths):
+        feed_dict = dict()
+        if 'word_dim' in self.params['question_config']:
+            feed_dict[self.q_word_ids] = question_word_ids
+            feed_dict[self.q_sentence_lengths] = question_sentence_lengths
+
+        if 'char_dim' in self.params['question_config']:
+            feed_dict[self.q_char_ids] = question_char_ids
+            feed_dict[self.q_word_lengths] = question_char_lengths
+        feed_dict[self.dropout_keep_prob] = 1
+        return self.session.run(self.question_drop, feed_dict)
+
+    def get_relation_repr(self,
+                          relation_ids):
+        feed_dict = dict()
+        feed_dict[self.pos_relation_ids] = relation_ids
+        feed_dict[self.dropout_keep_prob] = 1
+        return self.session.run(self.pos_relation_drop, feed_dict)
 
     def save(self, save_path):
         return self.saver.save(self.session, save_path)
+
 
 
 

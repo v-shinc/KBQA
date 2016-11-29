@@ -1,5 +1,8 @@
 import sys
-
+import os
+import json
+from data_helper import DataSet
+from model import RelationMatcherModel
 
 def evaluate(dataset, model, fn_dev, fn_res):
     lno = 0
@@ -53,9 +56,29 @@ def evaluate(dataset, model, fn_dev, fn_res):
     p_at_1 = num_p_at_1 * 1.0 / count
     average_candidate_count *= 1.0 / count
     average_rank = average_rank_index * 1.0 / count
-    res_info = "# {} test case\nP@1: {}\nAverage rank: {}\nAverage number of candidates: {}"\
+    res_info = "Number of test case: {} \nP@1: {}\nAverage rank: {}\nAverage number of candidates: {}"\
         .format(count, p_at_1, average_rank, average_candidate_count)
     if res_file:
         print >> res_file, res_info
     print res_info
     return p_at_1, average_rank, average_candidate_count, res_info
+
+if __name__ == '__main__':
+    dir_path = sys.argv[1]  # model dir path
+    fn_dev = sys.argv[2]    # test file path
+    if len(sys.argv) == 3:
+        res_name = 'test.res'
+    else:
+        res_name = sys.argv[3]
+    dir_path = os.path.abspath(dir_path)
+    checkpoint_dir = os.path.join(dir_path, "checkpoints")
+    save_path = os.path.join(checkpoint_dir, "model")
+
+    config_path = os.path.join(dir_path, 'config.json')
+    parameters = json.load(open(config_path))
+    dataset = DataSet(parameters)
+    model = RelationMatcherModel(
+        parameters
+    )
+    fn_res = os.path.join(dir_path, res_name)
+    evaluate(dataset, model, fn_dev, fn_res)

@@ -20,7 +20,7 @@ class DeepCRF(object):
                  num_pos,
                  num_tag):
         self.word_ids = tf.placeholder(tf.int32, [None, max_seq_len], name="word_ids")
-        self.seq_lengths = tf.placeholder(tf.int64, [None], name="seq_lengths") # number of valid words
+        self.seq_lengths = tf.placeholder(tf.int64, [None], name="seq_lengths")  # number of valid words
         self.char_for_ids = tf.placeholder(tf.int32, [None, max_seq_len, max_word_len], name="char_for_ids")
         self.char_rev_ids = tf.placeholder(tf.int32, [None, max_seq_len, max_word_len], name="char_rev_ids")
         self.word_lengths = tf.placeholder(tf.int32, [None, max_seq_len], name="char_pos_ids")
@@ -36,7 +36,7 @@ class DeepCRF(object):
         initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
         inputs = []
         input_dim = 0
-        with tf.device("/gpu:1"):
+        with tf.device("/gpu:2"):
             if word_dim:
                 word_embedding = tf.get_variable('word_embedding', [num_word, word_dim], initializer=initializer)
                 word_embedded = tf.nn.embedding_lookup(word_embedding, self.word_ids, name="word_layer")
@@ -103,6 +103,7 @@ class DeepCRF(object):
             self.transitions = tf.get_variable("transitions", [num_tag, num_tag])
             log_likelihood, _ = crf.crf_log_likelihood(self.tag_scores, self.tag_ids, self.seq_lengths, self.transitions)
             self.loss = tf.reduce_mean(-log_likelihood)
+            self.likelihood = tf.exp(log_likelihood)
             tvars = tf.trainable_variables()
             max_grad_norm = 5
             grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
@@ -113,7 +114,7 @@ class DeepCRF(object):
         config.gpu_options.allow_growth = True
         config.allow_soft_placement = True
         config.log_device_placement = False
-        self.session = tf.InteractiveSession(config=config)
+        self.session = tf.Session(config=config)
         self.saver = tf.train.Saver(tf.all_variables(), max_to_keep=1)
         if load_path:
             self.saver.restore(self.session, load_path)
@@ -184,33 +185,7 @@ class DeepCRF(object):
         return loss
 
     def predict(self, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids, pos_ids):
-        feed_dict = {}
-        feed_dict[self.seq_lengths] = seq_lengths
-        feed_dict[self.dropout_keep_prob] = 1
-        if self.word_dim:
-            feed_dict[self.word_ids] = word_ids
-        if self.char_dim:
-            feed_dict[self.char_for_ids] = char_for_ids
-            feed_dict[self.word_lengths] = word_lengths
-            if self.char_bidirect:
-                feed_dict[self.char_rev_ids] = char_rev_ids
-        if self.cap_dim:
-            feed_dict[self.cap_ids] = cap_ids
-        if self.pos_dim:
-            feed_dict[self.pos_ids] = pos_ids
-        tag_scores, transitions = self.session.run([self.tag_scores, self.transitions], feed_dict)
-        batch_viterbi_sequence = []
-        for tag_score_, seq_length_ in zip(tag_scores, seq_lengths):
-            # Remove padding from scores and tag sequence.
-            tag_score_ = tag_score_[:seq_length_]
-
-            # Compute the highest scoring sequence.
-            viterbi_sequence, _ = crf.viterbi_decode(tag_score_, transitions)
-            batch_viterbi_sequence.append(viterbi_sequence)
-        return batch_viterbi_sequence
-
-    def predict_topk(self, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids, pos_ids):
-        feed_dict = {}
+        feed_dict = dict()
         feed_dict[self.seq_lengths] = seq_lengths
         feed_dict[self.dropout_keep_prob] = 1
         if self.word_dim:
@@ -232,10 +207,61 @@ class DeepCRF(object):
             tag_score_ = tag_score_[:seq_length_]
 
             # Compute the highest scoring sequence.
-            viterbi_sequence, scores = crf.viterbi_decode_top2(tag_score_, transitions)
+            viterbi_sequence, score = crf.viterbi_decode(tag_score_, transitions)
+            batch_viterbi_sequence.append(viterbi_sequence)
+            batch_score.append(score)
+
+        return batch_viterbi_sequence, batch_score
+
+    def predict_top_k(self, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids, pos_ids):
+        feed_dict = dict()
+        feed_dict[self.seq_lengths] = seq_lengths
+        feed_dict[self.dropout_keep_prob] = 1
+        if self.word_dim:
+            feed_dict[self.word_ids] = word_ids
+        if self.char_dim:
+            feed_dict[self.char_for_ids] = char_for_ids
+            feed_dict[self.word_lengths] = word_lengths
+            if self.char_bidirect:
+                feed_dict[self.char_rev_ids] = char_rev_ids
+        if self.cap_dim:
+            feed_dict[self.cap_ids] = cap_ids
+        if self.pos_dim:
+            feed_dict[self.pos_ids] = pos_ids
+        tag_scores, transitions = self.session.run([self.tag_scores, self.transitions], feed_dict)
+        batch_viterbi_sequence = []
+        batch_score = []
+        for tag_score_, seq_length_ in zip(tag_scores, seq_lengths):
+            # Remove padding from scores and tag sequence.
+            tag_score_ = tag_score_[:seq_length_]
+
+            # Compute the highest scoring sequence.
+            viterbi_sequence, scores = crf.viterbi_decode_top_2(tag_score_, transitions)
+
             batch_viterbi_sequence.append(viterbi_sequence)
             batch_score.append(scores)
+
         return batch_viterbi_sequence, batch_score
+
+    def get_likelihood(self, tag_ids, seq_lengths, word_ids, char_for_ids, char_rev_ids, word_lengths, cap_ids, pos_ids):
+        feed_dict = dict()
+        feed_dict[self.seq_lengths] = seq_lengths
+        feed_dict[self.dropout_keep_prob] = 1
+        if self.word_dim:
+            feed_dict[self.word_ids] = word_ids
+        if self.char_dim:
+            feed_dict[self.char_for_ids] = char_for_ids
+            feed_dict[self.word_lengths] = word_lengths
+            if self.char_bidirect:
+                feed_dict[self.char_rev_ids] = char_rev_ids
+        if self.cap_dim:
+            feed_dict[self.cap_ids] = cap_ids
+        if self.pos_dim:
+            feed_dict[self.pos_ids] = pos_ids
+        feed_dict[self.tag_ids] = tag_ids
+        likelihood = self.session.run(self.likelihood, feed_dict)
+        return likelihood
+
 
     def save(self, save_path):
         return self.saver.save(self.session, save_path)

@@ -221,8 +221,10 @@ def gen_unsolved_sentence(fn_in, fn_out):
                         candidates[e[0]] = e[1]
             if len(candidates) == 0:
                 sentence = [w.split('|')[0]for w in data['tag_res'].split()][1:-1]
-                all_pos = data['pos'][1:-1]
-
+                if 'pos' in data:
+                    all_pos = data['pos'][1:-1]
+                else:
+                    all_pos = None
                 # use ngram of surface
                 for surface in surfaces:
                     surface = surface.lower().split()
@@ -237,11 +239,11 @@ def gen_unsolved_sentence(fn_in, fn_out):
                         # if found:
                         #     break
                         for i in range(l-j+1):
-                            if is_entity_occurrence(all_pos, sentence, start + i, start + i + j):
+                            if 'pos' not in data or is_entity_occurrence(all_pos, sentence, start + i, start + i + j):
                                 s = ''.join(surface[i:i+j])
                                 res = DBManager.get_candidate_entities(s, 0.1)
                                 for e in res:
-                                    if (e[0] not in candidates or e[1] > candidates[e[0]]):
+                                    if e[1] < 1.1 and (e[0] not in candidates or e[1] > candidates[e[0]]):
                                         candidates[e[0]] = e[1]
                             found = len(res) > 0
             # candidates = sorted(candidates.items(), key=lambda x:x[1], reverse=True)[:20]

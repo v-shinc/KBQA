@@ -43,9 +43,9 @@ def split_sentence(text):
 def naive_split(text):
 
     text = text.lower()
-    text = strip_accents(text)
-    # to_blank = set(['\\', '-', u'–', u'—','-', '_', ':', '(', ')', '!', '?', ',', '.', '/', ';', '"', '...', u'“', u'”', u'…'])
-    to_blank = set(['\\', '-', '-', '_', ':', '(', ')', '!', '?', ',', '.', '/', ';', '"', '...'])
+    # text = strip_accents(text)  # TODO: remove this line, and transform special punctuation to English punctuation
+    to_blank = {'\\', '-', u'–', u'—', '-', '_', ':', '(', ')', '!', '?', ',', '.', '/', ';', '"', '...', u'“', u'”', u'…'}
+    # to_blank = set(['\\', '-', '-', '_', ':', '(', ')', '!', '?', ',', '.', '/', ';', '"', '...'])
     sentence = ''
     l = len(text)
     i = 0
@@ -64,7 +64,7 @@ def naive_split(text):
             if i + 3 <= l and (text[i:i+3] == "'s " or text[i:i+3] == "'m " or text[i:i+3] == "'d "):
                 sentence += ' '+text[i:i+3]
                 i += 3
-            elif i + 4 <= l and (text[i:i+4] == "'ll " or text[i:i+4] == "'re ") :
+            elif i + 4 <= l and (text[i:i+4] == "'ll " or text[i:i+4] == "'re "):
                 sentence += ' ' + text[i:i+4]
                 i += 4
             else:

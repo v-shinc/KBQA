@@ -74,9 +74,12 @@ class DataSet(object):
             self.word_to_id['<END>'] = end_idx
             self.id_to_word[end_idx] = '<END>'
             self.word_to_count['<END>'] = 1000
-        if 'char_dim' in params:
+        self.char_to_id, self.id_to_char, self.char_to_count = None, None, None
+        if 'char_dim' in params and params['char_dim'] > 0:
             self.char_to_id, self.id_to_char, self.char_to_count = load_mapping_and_count(params['fn_char'])
-        if 'pos_dim' in params:
+
+        self.pos_to_id, self.id_to_pos = None, None
+        if 'pos_dim' in params and params['pos_dim'] > 0:
             self.pos_to_id, self.id_to_pos = load_mapping(params['fn_pos'])
 
         self.tag_scheme_name = params['tag_scheme']
@@ -90,10 +93,10 @@ class DataSet(object):
 
     @property
     def num_word(self):
-        return len(self.word_to_id)
+        return len(self.word_to_id) + 1
     @property
     def num_char(self):
-        return len(self.char_to_id) if self.char_to_id else 0
+        return len(self.char_to_id) + 1if self.char_to_id else 0
     @property
     def num_cap(self):
         return 4 if 'cap_dim' in self.params else 0
@@ -240,7 +243,20 @@ class DataSet(object):
             yield ret
         train_file.close()
 
-    def get_named_entity_from_words(self, sentence, tag_sequence):
+    # TODO: test this function
+    def create_tag_sequence(self, start, end, length, tag_scheme):
+        """ Not include 'START' and 'END' """
+
+        sequence = ['START'] + ['O' for _ in range(0, start)] + ['B'] + ['I'] * (end - start - 1) + ['O'] * (length - end) + ['END']
+
+        if tag_scheme == 'iobes':
+            sequence = self.iob_to_iobes(sequence)
+
+        sequence = [self.tag_to_id[t] for t in sequence]
+        sequence = self.pad_xx(sequence, self.tag_padding)
+        return [sequence]
+
+    def get_mention_from_words(self, sentence, tag_sequence):
         tag_sequence = [self.id_to_tag[t] for t in tag_sequence]
         entities = []
         entity = []
@@ -288,8 +304,14 @@ class DataSet(object):
         #             entity.append(w)
         # return entities, sentence, tag_sequence
 
-    def iob_to_iobes(self):
-        pass
+    @staticmethod
+    def iob_to_iobes(tagged):
+        for i in range(len(tagged)):
+            if tagged[i][-1] == 'B' and tagged[i + 1][-1] != 'I':
+                tagged[i][-1] = 'S'
+            if tagged[i][-1] == 'I' and tagged[i + 1][-1] != 'I':
+                tagged[i][-1] = 'E'
+        return tagged
 
     def iobes_to_iob(self):
         pass

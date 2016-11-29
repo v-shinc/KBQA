@@ -33,10 +33,11 @@ viterbi_sequence, viterbi_score = tf.contrib.crf.viterbi_decode(
 
 import tensorflow as tf
 import numpy as np
+import heapq
 
 __all__ = ["crf_sequence_score", "crf_log_norm", "crf_log_likelihood",
            "crf_unary_score", "crf_binary_score", "CrfForwardRnnCell",
-           "viterbi_decode"]
+           "viterbi_decode", "viterbi_decode_top_2", "viterbi_decode_top_k"]
 
 
 def _lengths_to_masks(lengths, max_length):
@@ -335,7 +336,19 @@ def viterbi_decode_top_2(score, transition_params):
 
     return viterbi, [score0, score1]
 
+
 def viterbi_decode_top_k(score, transition_params, k):
+    """Decode the top-k highest scoring sequence of tags outside of TensorFlow.
+        This should only be used at test time.
+        Args:
+          score: A [seq_len, num_tags] matrix of unary potentials.
+          transition_params: A [num_tags, num_tags] matrix of binary potentials.
+          k: a integer indicate top-k
+        Returns:
+          viterbi: A [seq_len] list of integers containing the highest scoring tag
+              indicies.
+          viterbi_score: A float containing the score for the Viterbi sequence.
+        """
     dp = [np.zeros_like(score) for _ in range(k)]
     num_tags = transition_params.shape[0]
     backpointers = [np.zeros_like(score, dtype=np.int32) for _ in range(k)]
