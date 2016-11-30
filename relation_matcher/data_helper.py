@@ -88,7 +88,7 @@ class DataSet:
                 all_word_lengths.append(word_lengths)
 
             all_relations.append(relation)
-            all_relation_ids.append([self.sub_relation_to_id[r] for r in relation.split('.')])
+            all_relation_ids.append([self.sub_relation_to_id[r] for r in relation.split('.')[-3:]])
         ret = {
             "word_ids": all_word_ids,
             "sentence_lengths": all_sentence_lengths,
@@ -114,18 +114,18 @@ class DataSet:
                 # handle positive relation
                 for pos_rel in data['pos_relation']:
                     all_relations.append(pos_rel)
-                    all_relation_ids.append([self.sub_relation_to_id[r] for r in pos_rel.split('.')])
+                    all_relation_ids.append([self.sub_relation_to_id[r] for r in pos_rel.split('.')[-3:]])
                 num_pos = len(data['pos_relation'])
 
                 # handle negative relation
                 if 'neg_relation' in data and len(data['neg_relation']) > 0:
                     for neg_rel in data['neg_relation']:
                         all_relations.append(neg_rel)
-                        all_relation_ids.append([self.sub_relation_to_id[r] for r in neg_rel.split('.')])
+                        all_relation_ids.append([self.sub_relation_to_id[r] for r in neg_rel.split('.')[-3:]])
                 else:
                     for neg_rel in self.relations:
                         all_relations.append(neg_rel)
-                        all_relation_ids.append([self.sub_relation_to_id[r] for r in neg_rel.split('.')])
+                        all_relation_ids.append([self.sub_relation_to_id[r] for r in neg_rel.split('.')[-3:]])
 
                 # handle question
                 str_words = data['question'].split()[:self.max_sentence_len]
@@ -194,7 +194,7 @@ class DataSet:
                     all_word_lengths.append(word_lengths)
 
                 pos_rel = np.random.choice(data['pos_relation'])
-                pos_relation_ids = [self.sub_relation_to_id[r] for r in pos_rel.split('.')]
+                pos_relation_ids = [self.sub_relation_to_id[r] for r in pos_rel.split('.')[-3:]]
                 if 'neg_relation' in data and len(data['neg_relation']) > 0:
                     neg_rel = np.random.choice(data['neg_relation'])
                 else:
@@ -202,7 +202,7 @@ class DataSet:
                         neg_rel = np.random.choice(self.relations)
                         if neg_rel not in data['pos_relation']:
                             break
-                neg_relation_ids = [self.sub_relation_to_id[r] for r in neg_rel.split('.')]
+                neg_relation_ids = [self.sub_relation_to_id[r] for r in neg_rel.split('.')[-3:]]
                 all_pos_relation_ids.append(pos_relation_ids)
                 all_neg_relation_ids.append(neg_relation_ids)
             ret = {

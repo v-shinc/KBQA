@@ -4,9 +4,10 @@ import json
 from data_helper import DataSet
 from model import RelationMatcherModel
 
-def evaluate(dataset, model, fn_dev, fn_res):
+
+def evaluate(dataset, model, fn_dev, fn_res, k=3):
     lno = 0
-    num_p_at_1 = 0
+    num_p_at_k = [0 for _ in range(k)]
     average_rank_index = 0
     average_candidate_count = 0
     count = 0
@@ -36,8 +37,10 @@ def evaluate(dataset, model, fn_dev, fn_res):
         for i in xrange(data['num_pos'], len(scores)):
             if scores[i] > pos_score:
                 rank_index += 1
-        if rank_index == 1:
-            num_p_at_1 += 1
+        for j in range(1, k+1):
+            if rank_index <= j:
+                num_p_at_k[j] += 1
+
         average_rank_index += rank_index
         average_candidate_count += len(scores)
         if res_file:
@@ -52,16 +55,18 @@ def evaluate(dataset, model, fn_dev, fn_res):
                 pos_relation_score.append([data['relations'][i], rank_index])
             # rank_list_str = ''.join(["%s: %s" % (r, s) for r, s in rank_list])
             print >> res_file, '{0}\t{1}\t{2}'.format(data['words'], pos_relation_score, rank_list).encode('utf8')
-
-    p_at_1 = num_p_at_1 * 1.0 / count
+    p_at_k = [num_p_at_k[j] * 1.0 / count for j in range(1, k+1)]
     average_candidate_count *= 1.0 / count
     average_rank = average_rank_index * 1.0 / count
-    res_info = "Number of test case: {} \nP@1: {}\nAverage rank: {}\nAverage number of candidates: {}"\
-        .format(count, p_at_1, average_rank, average_candidate_count)
+    res_info = ""
+    for j in range(1, k+1):
+        res_info += "p@{}: {}\n".format(j, p_at_k[j])
+    res_info += "Number of test case: {} \nAverage rank: {}\nAverage number of candidates: {}"\
+        .format(count, average_rank, average_candidate_count)
     if res_file:
         print >> res_file, res_info
     print res_info
-    return p_at_1, average_rank, average_candidate_count, res_info
+    return p_at_k[0], average_rank, average_candidate_count, res_info
 
 if __name__ == '__main__':
     dir_path = sys.argv[1]  # model dir path

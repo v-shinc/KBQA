@@ -13,6 +13,7 @@ class RelationMatcher:
         parameters = json.load(open(config_path))
 
         parameters['reload'] = True
+        parameters['load_path'] = save_path
         with tf.Graph().as_default():
             self.model = RelationMatcherModel(parameters)
         self.dataset = DataSet(parameters)
