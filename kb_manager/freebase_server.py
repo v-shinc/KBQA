@@ -30,20 +30,39 @@ class FreebaseServiceHandler:
                     if rel.startswith('m.'):
                         continue
                     self.mediate_relations.add(rel)
+
     def load_kb(self):
         if not self.kb:
-            kb_filename = globals.config.get('FREEBASE', 'freebase-file')
+            # kb_filename = globals.config.get('FREEBASE', 'freebase-file')
             self.kb = dict()
-            with open(kb_filename) as fin:
-                for line in fin:
-                    subject, relation, objects = line.decode('utf8').strip().split('\t')
-                    if subject not in self.kb:
-                        self.kb[subject] = dict()
-                    if relation not in self.kb[subject]:
-                        self.kb[subject][relation] = objects.split()
+            for fn in ['../../data/fb.triple.mini']:  # ['../../data/fb.triple.mini', '../../data/FB2M.mini']:
+                with open(fn) as fin:
+                    for line in fin:
+                        subject, relation, objects = line.decode('utf8').strip().split('\t')
+                        if subject not in self.kb:
+                            self.kb[subject] = dict()
+                        if relation not in self.kb[subject]:
+                            self.kb[subject][relation] = set()
+                        self.kb[subject][relation].update(objects.split())
+
 
     def is_mediate_relation(self, rel):
         return rel in self.mediate_relations
+
+    def get_relations(self, subject):
+        res = list()
+        if subject not in self.kb:
+            return res
+
+        for r1, objs1 in self.kb[subject].iteritems():
+            if self.is_mediate_relation(r1):
+                for o1 in objs1:
+                    if o1 in self.kb:
+                        for r2, objs2 in self.kb[o1].iteritems():
+                            res.append([r1, r2])
+            else:
+                res.append([r1])
+        return res
 
     def get_subgraph(self, subject):
         print 'server receive', subject
@@ -63,8 +82,16 @@ class FreebaseServiceHandler:
                 for o1 in objs1:
                     if o1 != subject:
                         res.append([[subject, r1, o1]])
-        print res
         return res
+
+    def get_one_hop_paths(self, subject):
+        ret = list()
+        if subject not in self.kb:
+            return ret
+        for rel, objs in self.kb.iteritems():
+            for o in objs:
+                ret.append([subject, rel, o])
+        return ret
 
 if __name__ == '__main__':
     print "Init freebase server..."

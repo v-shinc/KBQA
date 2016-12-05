@@ -31,11 +31,15 @@ class FreebaseClient:
         except Thrift.TException, tx:
           print "%s" % (tx.message)
 
+    def get_relations(self, subject):
+        return self.client.get_relations(subject)
+
     def get_subgraph(self, subject):
-        print "receive requestion", subject
-        ret = self.client.get_subgraph(subject)
-        print ret
-        return ret
+        return self.client.get_subgraph(subject)
+
+
+    def get_one_hop_paths(self, subject):
+        return self.client.get_one_hop_paths(subject)
 
     def close(self):
         self.transport.close()
