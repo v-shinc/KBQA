@@ -51,6 +51,7 @@ class FreebaseServiceHandler:
 
     def get_relations(self, subject):
         res = list()
+        vis = set()
         if subject not in self.kb:
             return res
 
@@ -59,7 +60,9 @@ class FreebaseServiceHandler:
                 for o1 in objs1:
                     if o1 in self.kb:
                         for r2, objs2 in self.kb[o1].iteritems():
-                            res.append([r1, r2])
+                            if (r1, r2) not in vis:
+                                res.append([r1, r2])
+                                vis.add((r1, r2))
             else:
                 res.append([r1])
         return res
