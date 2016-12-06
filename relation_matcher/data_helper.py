@@ -1,5 +1,6 @@
 import numpy as np
 import json
+import math
 
 def load_mapping_and_count(fn_word):
     index = 0
@@ -27,6 +28,8 @@ def load_mapping(fn):
             index += 1
     return xx_to_id, id_to_xx
 
+def tanh(x):
+    return 1 - 2. / (math.exp(2 * x) + 1)
 
 class DataSet:
     def __init__(self, params):
@@ -38,7 +41,8 @@ class DataSet:
                 index = len(self.word_to_id)
                 self.word_to_id['<$>'] = index
                 self.id_to_word[index] = '<$>'
-            self.word_padding = len(self.word_to_id)
+            self.unknown_id = len(self.word_to_id)
+            self.word_padding = len(self.word_to_id) + 1
 
         self.char_based = False
         self.max_sentence_len = params['max_sentence_len']
@@ -52,9 +56,10 @@ class DataSet:
         self.relations = [r for r in relation_to_id.keys() if len(r.split('.')) == 3]
         self.params = params
 
+
     @property
     def num_word(self):
-        return len(self.word_to_id) + 1 if self.word_based else 0
+        return len(self.word_to_id) + 2 if self.word_based else 0
 
     @property
     def num_char(self):
@@ -75,7 +80,7 @@ class DataSet:
         for pattern, relation in zip(patterns, relations):
             pattern = pattern.split()[:self.max_sentence_len]
             if self.word_based:
-                pattern_ids = [self.word_to_id[w] for w in pattern if w in self.word_to_id]
+                pattern_ids = [self.word_to_id.get(w, self.unknown_id) for w in pattern]
                 if len(pattern_ids) == 0:
                     raise ValueError('len(pattern_ids) == 0')
                 all_word_ids.append(self.pad_words(pattern_ids, self.word_padding))
@@ -130,7 +135,8 @@ class DataSet:
                 # handle question
                 str_words = data['question'].split()[:self.max_sentence_len]
                 if self.word_based:
-                    word_ids = [self.word_to_id[w] for w in str_words if w in self.word_to_id]
+
+                    word_ids = [self.word_to_id.get(w, self.unknown_id) for w in str_words]
                     if len(word_ids) == 0:
                         raise ValueError('len(word_ids) == 0')
                     all_word_ids = [self.pad_words(word_ids, self.word_padding)] * len(all_relation_ids)
@@ -178,9 +184,15 @@ class DataSet:
                 line = train_file.readline()
                 data = json.loads(line, encoding='utf8')
 
+                pos_rel = np.random.choice(data['pos_relation'])
+
+                pos_relation_ids = [self.sub_relation_to_id[r] for r in pos_rel.split('.')[-3:] if r in self.sub_relation_to_id]
+                if len(pos_relation_ids) != 3:
+                    continue
+
                 str_words = data['question'].split()[:self.max_sentence_len]
                 if self.word_based:
-                    word_ids = [self.word_to_id[w] for w in str_words if w in self.word_to_id]
+                    word_ids = [self.word_to_id.get(w, self.unknown_id) for w in str_words]
                     if len(word_ids) == 0:
                         raise ValueError('len(word_ids) == 0')
                     all_word_ids.append(self.pad_words(word_ids, self.word_padding))
@@ -193,9 +205,8 @@ class DataSet:
                     all_char_ids.append(char_ids)
                     all_word_lengths.append(word_lengths)
 
-                pos_rel = np.random.choice(data['pos_relation'])
-                pos_relation_ids = [self.sub_relation_to_id[r] for r in pos_rel.split('.')[-3:]]
-                if 'neg_relation' in data and len(data['neg_relation']) > 0:
+                # if 'neg_relation' in data and len(data['neg_relation']) > 0:
+                if np.random.uniform(0, 1) < tanh(len(data['neg_relation']) * 1. / 180):
                     neg_rel = np.random.choice(data['neg_relation'])
                 else:
                     while True:

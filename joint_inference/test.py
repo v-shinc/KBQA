@@ -1,6 +1,7 @@
 import sys
 import json
-from pipeline import BetaAnswer
+from pipeline import Pipeline
+from utils.string_utils import naive_split
 
 
 def compute_f1(gold_set, predict_set):
@@ -24,7 +25,7 @@ def compute_f1(gold_set, predict_set):
 
 def basic_exp(fn_test, fn_res):
     # only use entity linking module and relation match module
-    ba = BetaAnswer()
+    pipeline = Pipeline()
     webquestion = json.load(open(fn_test))
     gold, pred = [], []
     num_topic_solved = 0
@@ -33,18 +34,22 @@ def basic_exp(fn_test, fn_res):
         for data in webquestion:
             print '**' * 20
             question = data['utterance']
-            question, graphs = ba.parse(question)
+
+
+            question, features = pipeline.add_topic_feature(question)
+            question, features = pipeline.add_relation_match_feature(question, features)
+
             topic_set = set()
-            for g in graphs:
+            for g in features:
                 topic_set.add(g['topic'])
             if data['mid1'] in topic_set:
                 num_topic_solved += 1
             avg_num_topic += len(topic_set)
             gold.append(set(data['mids'].values()))
-            if len(graphs) == 0:
+            if len(features) == 0:
                 pred.append(set())
             else:
-                rank_list = sorted(graphs, key=lambda x: x['relation_score'], reverse=True)
+                rank_list = sorted(features, key=lambda x: x['relation_score'], reverse=True)
                 # relation_match_score = dict()
                 # for r in rank_list:
                 #     relation_match_score[(r['pattern'], r['relation'])] = r['relation_score']
@@ -94,6 +99,134 @@ def basic_exp(fn_test, fn_res):
     print res_info
 
 
-if __name__ == '__main__':
-    basic_exp("../data/wq.test.complete.v2", "tmp")
+def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn_out):
+    pipeline = Pipeline()
+    # symbols = {"_", "_'s", "_'"}
+    #
+    # def map_word(x):
+    #     if x in symbols:
+    #         return x.replace('_', "<$>")
+    #     else:
+    #         return x
 
+    with open(fn_out, 'w') as fout:
+        # process simple question
+        for fn in fn_simplequstion_list:
+            with open(fn) as fin:
+                for line in fin:
+                    _, positive_relation, _, pattern, question = line.decode('utf8').strip().split('\t')
+                    question, candidate_relations = pipeline.gen_candidate_relations(question)
+                    pattern = ' '.join(['<$>' if w == '_' else w for w in naive_split(pattern)])
+                    negative_relations = candidate_relations - {positive_relation}
+                    print >> fout, json.dumps({
+                        "question": pattern,
+                        "pos_relation": [positive_relation],
+                        "neg_relation": list(negative_relations)},
+                        ensure_ascii=False).encode('utf8')
+        # process webquestion
+        for fn in fn_webquestion_list:
+            webquestion = json.load(open(fn), encoding="utf8")
+            for data in webquestion:
+                positive_relations = set()
+                for path in data['paths']:
+                    if path[1] not in {"forward_pass_non_cvt", "forward_pass_cvt", "forward_direct"}:
+                        raise ValueError('path type error')
+                    if path[1] == "forward_pass_cvt" or path[1] == "forward_direct":
+                        positive_relations.add(path[0].split()[-2])
+                if len(positive_relations) == 0:
+                    continue
+                pattern = ' '.join(['<$>' if w == '_' else w for w in naive_split(data['sentence'])])
+                question, candidate_relations = pipeline.gen_candidate_relations(data['utterance'])
+                negative_relations = candidate_relations - positive_relations
+                print >> fout, json.dumps({
+                    "question": pattern,
+                    "pos_relation": list(positive_relations),
+                    "neg_relation": list(negative_relations)},
+                    ensure_ascii=False).encode('utf8')
+
+def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
+    pipeline = Pipeline()
+    complete_qids = set()
+    qids = set()
+    with open(fn_out, 'w') as fout:
+        # process webquestion
+        for fn in fn_wq_list:
+            webq = json.load(open(fn), encoding="utf8")
+            for data in webq:
+
+                positive_relations = set()
+                for path in data['paths']:
+                    if path[1] == "forward_pass_cvt" or path[1] == "forward_direct":
+                        positive_relations.add(path[0].split()[-2])
+
+                if len(positive_relations) == 0:
+                    continue
+                qids.add(data['id'])
+                question, candidate_graphs = pipeline.gen_candidate_query_graph(data['utterance'])
+                gold_answers = set(data['mids'].values())
+                for g in candidate_graphs:
+                    if g['topic'] == data['mid1'] and g['answer'] in gold_answers and g['relation'] in positive_relations:
+                        g['label'] = 1
+                    else:
+                        g['label'] = 0
+                    g['question'] = question
+                    g['qid'] = data['id']
+                    if g['label'] == 1:
+                        complete_qids.add(data['id'])
+                        print >> fout, json.dumps(g, ensure_ascii=False).encode('utf8')
+    print "total valid question", len(qids)
+    print "complete question", len(complete_qids)
+
+def debug(question):
+    pipeline = Pipeline()
+    question, graph = pipeline.gen_candidate_query_graph(question)
+    print graph
+
+if __name__ == '__main__':
+    # basic_exp("../data/wq.test.complete.v2", "tmp")
+
+    # Freebase is combination of fb.triple.mini and FB2M
+    # gen_data_for_relation_matcher(
+    #     ["../data/wq.train.complete.v2", "../data/wq.dev.complete.v2"],
+    #     ["../data/simple.train.dev.el.v2"],
+    #     "../data/merge_data/relation.train"
+    # )
+
+    # Freebase is combination of fb.triple.mini and FB2M
+    # gen_data_for_relation_matcher(
+    #     ["../data/wq.test.complete.v2"],
+    #     [],
+    #     "../data/merge_data/relation.wq.test"
+    # )
+    # gen_data_for_relation_matcher(
+    #     [],
+    #     ["../data/simple.test.el.v2"],
+    #     "../data/merge_data/relation.simple.test"
+    # )
+
+    # Freebase is fb.triple.mini
+    gen_data_for_relation_matcher(
+        ["../data/wq.train.complete.v2", "../data/wq.dev.complete.v2"],
+        ["../data/simple.train.dev.el.v2"],
+        "../data/my_fb/relation.train.tmp"
+    )
+    # Freebase is fb.triple.mini
+    # gen_data_for_relation_matcher(
+    #     ["../data/wq.test.complete.v2"],
+    #     [],
+    #     "../data/my_fb/wq.relation.test"
+    # )
+    # gen_data_for_relation_matcher(
+    #     [],
+    #     ["../data/simple.test.el.v2"],
+    #     "../data/my_fb/simple.relation.test"
+    # )
+
+    # Generate overall features for answer selection
+    # gen_query_graph(
+    #     ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
+    #     [],
+    #     '../data/wq.answer.selection.train'
+    # )
+
+    # debug(sys.argv[1])
