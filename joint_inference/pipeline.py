@@ -34,12 +34,12 @@ class Pipeline(object):
                       "pattern", "answer", "relation_score", "pattern_repr", "relation_repr"]
         """
         # generate entity feature
-        question, candidates = self.entity_linker.get_candidate_topic_entities(question)
+        question, features = self.entity_linker.get_candidate_topic_entities(question)
         print '[Pipeline.add_topic_feature]', question
-        features = []
-        for mid, f in candidates.iteritems():
-            f['topic'] = mid
-            features.append(f)
+        # features = []
+        # for mid, f in candidates.iteritems():
+        #     f['topic'] = mid
+        #     features.append(f)
 
         return question, features
 
@@ -190,6 +190,11 @@ class Pipeline(object):
                 features[i]['answer_word'] = len(answer_words.intersection(qwords)) * 1.0 / len(answer_words)
 
         return features
+
+    def create_query_graph_given_topic(self, question, mention):
+        question, features = self.entity_linker.get_candidate_topic_entities_given_mention(question, mention)
+        features = self.add_path_feature(question, features)
+        return question, features
 
     def gen_candidate_relations(self, question):
         question, candidates = self.entity_linker.get_candidate_topic_entities(question)

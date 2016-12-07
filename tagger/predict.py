@@ -145,11 +145,11 @@ class EntityMentionTagger(object):
         )
         return scores.tolist()
 
-    def get_mention_likelihood(self, sentence, mention):
+    def get_mention_likelihood(self, question, mention):
         if self.use_part_of_speech:
-            sentence, poss = self.get_pos_tag(sentence)
+            sentence, poss = self.get_pos_tag(question)
         else:
-            sentence = naive_split(sentence)
+            sentence = naive_split(question)
             poss = None
         mention = mention.split()
         data = self.dataset.create_model_input(sentence, poss)
@@ -166,7 +166,7 @@ class EntityMentionTagger(object):
             data['cap_ids'],
             data['pos_ids'],
         )
-        return scores.tolist()[0]
+        return question, scores.tolist()[0]
 
 
 class EntityLinker(object):
@@ -200,6 +200,20 @@ class EntityLinker(object):
             return True
         return False
 
+    def get_candidate_topic_entities_given_mention(self, question, mention):
+        entities = DBManager.get_candidate_entities(mention, 0.1)
+        candidates = []
+        for e in entities:
+            mid = e[0]
+            entity_score = e[1]
+            c = dict()
+            c['mention'] = mention
+            c['entity_score'] = entity_score
+            c['topic'] = mid
+            question, c['mention_score'] = self.entity_mention_tagger.get_mention_likelihood(question, mention)
+            candidates.append(c)
+        return question, candidates
+
     def get_candidate_topic_entities(self, sentence):
         """
         Returns:
@@ -220,6 +234,7 @@ class EntityLinker(object):
                     continue
                 if mid not in candidates or entity_score > candidates[mid]['entity_score']:
                     candidates[mid] = dict()
+                    candidates[mid]['topic'] = mid
                     candidates[mid]['mention'] = surface
                     candidates[mid]['entity_score'] = entity_score
                     candidates[mid]['mention_score'] = likelihood
@@ -251,15 +266,16 @@ class EntityLinker(object):
 
                             if entity_score < 1.1 and (mid not in candidates or entity_score > candidates[mid]['entity_score']):
                                 candidates[mid] = dict()
+                                candidates[mid]['topic'] = mid
                                 candidates[mid]['mention'] = ' '.join(surface[i:i + j])
                                 candidates[mid]['entity_score'] = entity_score
 
-                                candidates[mid]['mention_score'] = self.entity_mention_tagger.get_mention_likelihood(sentence, ' '.join(surface[i:i + j]))
+                                _, candidates[mid]['mention_score'] = self.entity_mention_tagger.get_mention_likelihood(sentence, ' '.join(surface[i:i + j]))
                         found = len(res) > 0
         print '[EntityLinker.get_candidate_topic_entities] conclude'
         for mid, info in candidates.iteritems():
             print mid, info
-        return res['sentence'], candidates
+        return res['sentence'], candidates.values()
 
 
 
