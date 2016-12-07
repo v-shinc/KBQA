@@ -41,7 +41,7 @@ def split_sentence(text):
     return new_words, normalized
 
 def naive_split(text):
-
+    """ The placeholder of pattern should be <$> if text is a pattern """
     text = text.lower()
     # text = strip_accents(text)  # TODO: remove this line, and transform special punctuation to English punctuation
     to_blank = {'\\', '-', u'–', u'—', '-', '_', ':', '(', ')', '!', '?', ',', '.', '/', ';', '"', '...', u'“', u'”', u'…'}

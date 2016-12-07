@@ -37,7 +37,7 @@ def basic_exp(fn_test, fn_res):
 
 
             question, features = pipeline.add_topic_feature(question)
-            question, features = pipeline.add_relation_match_feature(question, features)
+            question, features = pipeline.add_path_feature(question, features)
 
             topic_set = set()
             for g in features:
@@ -102,12 +102,12 @@ def basic_exp(fn_test, fn_res):
 def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn_out):
     pipeline = Pipeline()
     # symbols = {"_", "_'s", "_'"}
-    #
-    # def map_word(x):
-    #     if x in symbols:
-    #         return x.replace('_', "<$>")
-    #     else:
-    #         return x
+
+    def map_word(x):
+        if x.startswith('_') or x.endswith('_'):
+            return x.replace('_', "<$>")
+        else:
+            return x
 
     with open(fn_out, 'w') as fout:
         # process simple question
@@ -116,7 +116,7 @@ def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn
                 for line in fin:
                     _, positive_relation, _, pattern, question = line.decode('utf8').strip().split('\t')
                     question, candidate_relations = pipeline.gen_candidate_relations(question)
-                    pattern = ' '.join(['<$>' if w == '_' else w for w in naive_split(pattern)])
+                    pattern = ' '.join(naive_split(' '.join([map_word(w) for w in pattern.split()])))
                     negative_relations = candidate_relations - {positive_relation}
                     print >> fout, json.dumps({
                         "question": pattern,
@@ -135,7 +135,8 @@ def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn
                         positive_relations.add(path[0].split()[-2])
                 if len(positive_relations) == 0:
                     continue
-                pattern = ' '.join(['<$>' if w == '_' else w for w in naive_split(data['sentence'])])
+                pattern = ' '.join(naive_split(' '.join([map_word(w) for w in data['sentence'].split()])))
+
                 question, candidate_relations = pipeline.gen_candidate_relations(data['utterance'])
                 negative_relations = candidate_relations - positive_relations
                 print >> fout, json.dumps({
