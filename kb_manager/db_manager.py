@@ -72,6 +72,21 @@ class DBManager(object):
         except KeyError:
             return []
 
+    # @staticmethod
+    # def get_one_hop_relation(subject):
+    #     if not DBManager.freebase_db:
+    #         DBManager.freebase_db = leveldb.LevelDB(globals.config.get('LevelDB', 'freebase_db'))
+    #     try:
+    #         multi_rel_objs = DBManager.freebase_db.Get(subject.encode('utf8')).decode('utf8')
+    #
+    #         multi_rel_objs = multi_rel_objs.split('\t')
+    #         ret = []
+    #         for rel_objs in multi_rel_objs:
+    #             ret.append(rel_objs.split()[0])
+    #         return ret
+    #     except KeyError:
+    #         return []
+
     @staticmethod
     def is_mediate_relation(relation):
         if not DBManager.mediate_relations:
@@ -108,7 +123,12 @@ class DBManager(object):
         return ret
 
     @staticmethod
-    def get_relations(subject):
+    def get_multiple_hop_relations(subject):
+        """
+        return list of relations from subject. for example,  [[r], [r_1, r_2], ..., ].
+        :param subject:
+        :return:
+        """
         if not DBManager.freebase_db:
             DBManager.freebase_db = leveldb.LevelDB(globals.config.get('LevelDB', 'freebase_db'))
         subgraph = DBManager.get_subgraph(subject)
@@ -123,11 +143,41 @@ class DBManager(object):
                 ret.append([path[0][1], path[1][1]])
         return ret
 
+    @staticmethod
+    def get_core_paths_without_object(subject):
+        """
+        TODO: check whether answer has name
+        :param subject:
+        :return: 2D list
+        """
+        if not DBManager.freebase_db:
+            DBManager.freebase_db = leveldb.LevelDB(globals.config.get('LevelDB', 'freebase_db'))
+
+        first_hop = DBManager.get_one_hop_path(subject)
+        ret = []
+        vis = set()
+        for i in xrange(len(first_hop)):
+            r1 = first_hop[i][1]
+            if DBManager.is_mediate_relation(r1):
+                mediator = first_hop[i][2]
+                second_hop = DBManager.get_one_hop_path(mediator)
+                for j in xrange(len(second_hop)):
+                    if second_hop[j][2] == subject:
+                        continue
+                    if (subject, r1, mediator, second_hop[j][1]) not in vis:
+                        vis.add((subject, r1, mediator, second_hop[j][1]))
+                        ret.append([subject, r1, mediator, second_hop[j][1]])
+            else:
+                if (subject, first_hop[i][1]) not in vis:
+                    vis.add((subject, first_hop[i][1]))
+                    ret.append([subject, first_hop[i][1]])
+        return ret
+
 
 if __name__ == '__main__':
     globals.read_configuration('../config.cfg')
     # print DBManager.get_candidate_entities("jake'sstory", 0)
     # print len(DBManager.get_one_hop_graph('m.0f2y0'))
     print DBManager.get_subgraph('m.0f2y0')
-    print DBManager.get_relations('m.0f2y0')
+    print DBManager.get_multiple_hop_relations('m.0f2y0')
 

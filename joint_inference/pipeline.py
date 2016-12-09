@@ -36,6 +36,7 @@ class Pipeline(object):
         # generate entity feature
         question, features = self.entity_linker.get_candidate_topic_entities(question)
         print '[Pipeline.add_topic_feature]', question
+
         # features = []
         # for mid, f in candidates.iteritems():
         #     f['topic'] = mid
@@ -44,7 +45,7 @@ class Pipeline(object):
         return question, features
 
     def add_path_feature(self, question, features, topk=-1):
-        print '[Pipeline.add_relation_match_feature]', question
+        # print '[Pipeline.add_relation_match_feature]', question
         new_features = []
         pattern_relation_set = set()
 
@@ -52,26 +53,6 @@ class Pipeline(object):
             mid = f['topic']
             paths = self.db_manger.get_subgraph(mid)
             for path in paths:
-                # if len(path) == 2:
-                #     mediator = path[0][2]
-                #     name = self.get_name(mediator)
-                #     if name:
-                #         relation = path[0][1]
-                #         answer = path[0][2]
-                #         print mediator, "mediator node has name", name
-                #         print f['mention'], relation, mediator, path[1][1], self.get_name(path[1][2]), path[1][2]
-                #
-                #     else:
-                #         relation = path[1][1]
-                #         answer = path[1][2]
-                # else:
-                #     if not self.get_name(path[0][2]):
-                #         print path[-1][2], "has no name!!!"
-                #         continue
-                #     else:
-                #         relation = path[0][1]
-                #         answer = path[0][2]
-
                 relation = path[-1][1]
                 answer = path[-1][2]
                 if not self.get_name(answer):
@@ -138,7 +119,6 @@ class Pipeline(object):
             print entry, "has no name"
             return None
 
-
     def add_constraints(self, question, features):
         qwords = set(question.split())
         candidates_topics = set()
@@ -152,7 +132,7 @@ class Pipeline(object):
                 cons_paths = self.db_manger.get_one_hop_path(cvt)
                 features[i]['constraint_entity_in_q'] = 0
                 features[i]['constraint_entity_word'] = 0
-                features[i]['constraint_entity_word_detail'] = ""
+                # features[i]['constraint_entity_word_detail'] = ""
                 num_name_cross = 0
                 if len(cons_paths) > 10:
                     continue
@@ -175,7 +155,7 @@ class Pipeline(object):
 
                         if intersect_per > 0:
                             num_name_cross += 1
-                            features[i]['constraint_entity_word_detail'] += '\t'+name
+                            # features[i]['constraint_entity_word_detail'] += '\t'+name
 
                 if num_name_cross > 0:
                     features[i]['constraint_entity_word'] *= 1.0 / num_name_cross
@@ -200,15 +180,16 @@ class Pipeline(object):
         question, candidates = self.entity_linker.get_candidate_topic_entities(question)
         candidate_relations = set()
 
-        for mid, f in candidates.iteritems():
-            candidate_relations.update([r[-1] for r in self.db_manger.get_relations(mid)])
+        for f in candidates:
+            mid = f['topic']
+            candidate_relations.update([r[-1] for r in self.db_manger.get_multiple_hop_relations(mid)])
         return question, candidate_relations
 
     def gen_candidate_query_graph(self, question):
 
         question, features = self.add_topic_feature(question)
-        features = self.add_path_feature(question, features, topk=-1)
-        # features = self.add_constraints(question, features)
+        features = self.add_path_feature(question, features, topk=3)
+        features = self.add_constraints(question, features)
         return question, features
 
 if __name__ == '__main__':

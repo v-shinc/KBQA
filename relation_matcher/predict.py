@@ -30,6 +30,7 @@ class RelationMatcher:
         return scores[0]
 
     def get_batch_match_score(self, patterns, relations):
+        # TODO: if number of relation is big, compute score in batches
         data = self.dataset.create_model_input(patterns, relations)
         scores, pattern_repr, relation_repr = self.model.predict(
             data['word_ids'],

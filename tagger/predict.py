@@ -9,7 +9,7 @@ from model import DeepCRF
 from data_helper import DataSet
 from utils.string_utils import naive_split
 from corenlp_parser.local_parser import NLPParser
-from utils.db_manager import DBManager
+from kb_manager.db_manager import DBManager
 
 
 def find_word(sentence, word):
@@ -223,10 +223,10 @@ class EntityLinker(object):
         res = self.entity_mention_tagger.tag(sentence)
         candidates = dict()
         for surface, likelihood in res['mentions'].items():
-            print '-' * 20
+            # print '-' * 20
             surface_ = surface.lower().replace(' ', '')
             entity_res = DBManager.get_candidate_entities(surface_, 0.1)
-            print "key = {}, likelihood = {}, find entities {}".format(surface, likelihood, entity_res)
+            # print "key = {}, likelihood = {}, find entities {}".format(surface, likelihood, entity_res)
             for e in entity_res:
                 mid = e[0]
                 entity_score = e[1]
@@ -240,7 +240,7 @@ class EntityLinker(object):
                     candidates[mid]['mention_score'] = likelihood
         # use ngram of
         if len(candidates) == 0:
-            print '[get_candidate_topic_entities] use ngram of tagged mention',
+            # print '[get_candidate_topic_entities] use ngram of tagged mention',
             # all_pos = res['pos']
             for surface in res['mentions'].keys():
                 surface = surface.lower().split()
@@ -272,9 +272,9 @@ class EntityLinker(object):
 
                                 _, candidates[mid]['mention_score'] = self.entity_mention_tagger.get_mention_likelihood(sentence, ' '.join(surface[i:i + j]))
                         found = len(res) > 0
-        print '[EntityLinker.get_candidate_topic_entities] conclude'
-        for mid, info in candidates.iteritems():
-            print mid, info
+        # print '[EntityLinker.get_candidate_topic_entities] conclude'
+        # for mid, info in candidates.iteritems():
+        #     print mid, info
         return res['sentence'], candidates.values()
 
 

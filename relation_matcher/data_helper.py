@@ -192,6 +192,10 @@ class DataSet:
 
                 str_words = data['question'].split()[:self.max_sentence_len]
                 if self.word_based:
+                    # for w in str_words:
+                    #     if w not in self.word_to_id:
+                    #         print data['question']
+                    #         raise ValueError("{} not in self.word_to_id".format(w))
                     word_ids = [self.word_to_id.get(w, self.unknown_id) for w in str_words]
                     if len(word_ids) == 0:
                         raise ValueError('len(word_ids) == 0')
@@ -206,7 +210,13 @@ class DataSet:
                     all_word_lengths.append(word_lengths)
 
                 # if 'neg_relation' in data and len(data['neg_relation']) > 0:
-                if np.random.uniform(0, 1) < tanh(len(data['neg_relation']) * 1. / 180):
+                # while True:
+                #     neg_rel = np.random.choice(self.relations)
+                #     if neg_rel not in data['pos_relation']:
+                #         break
+
+                # if np.random.uniform(0, 1) < tanh(len(data['neg_relation']) * 1. / 180):
+                if len(data['neg_relation']) > 0:
                     neg_rel = np.random.choice(data['neg_relation'])
                 else:
                     while True:

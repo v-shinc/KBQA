@@ -115,13 +115,14 @@ def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn
             with open(fn) as fin:
                 for line in fin:
                     _, positive_relation, _, pattern, question = line.decode('utf8').strip().split('\t')
-                    question, candidate_relations = pipeline.gen_candidate_relations(question)
+                    # question, candidate_relations = pipeline.gen_candidate_relations(question)
                     pattern = ' '.join(naive_split(' '.join([map_word(w) for w in pattern.split()])))
-                    negative_relations = candidate_relations - {positive_relation}
+                    # negative_relations = candidate_relations - {positive_relation}
                     print >> fout, json.dumps({
                         "question": pattern,
                         "pos_relation": [positive_relation],
-                        "neg_relation": list(negative_relations)},
+                        # "neg_relation": list(negative_relations)},
+                        "neg_relation": []},
                         ensure_ascii=False).encode('utf8')
         # process webquestion
         for fn in fn_webquestion_list:
@@ -174,9 +175,18 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
                     g['qid'] = data['id']
                     if g['label'] == 1:
                         complete_qids.add(data['id'])
-                        print >> fout, json.dumps(g, ensure_ascii=False).encode('utf8')
+                    print >> fout, json.dumps(g, ensure_ascii=False).encode('utf8')
     print "total valid question", len(qids)
     print "complete question", len(complete_qids)
+
+
+def transform_query_garaph_to_csv(fn, fn_csv, features):
+    with open(fn_csv, 'w') as fout:
+        with open(fn) as fin:
+            for line in fin:
+                data = json.loads(line)
+                print >> fout, ' '.join([str(data.get(f, 0)) for f in features])
+
 
 def debug(question):
     pipeline = Pipeline()
@@ -209,7 +219,7 @@ if __name__ == '__main__':
     gen_data_for_relation_matcher(
         ["../data/wq.train.complete.v2", "../data/wq.dev.complete.v2"],
         ["../data/simple.train.dev.el.v2"],
-        "../data/my_fb/relation.train.tmp"
+        "../data/my_fb/relation.train"
     )
     # Freebase is fb.triple.mini
     # gen_data_for_relation_matcher(
@@ -227,7 +237,11 @@ if __name__ == '__main__':
     # gen_query_graph(
     #     ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
     #     [],
-    #     '../data/wq.answer.selection.train'
+    #     '../data/wq.answer.selection.train.top3'
     # )
-
+    # gen_query_graph(
+    #     ['../data/wq.test.complete.v2'],
+    #     [],
+    #     '../data/wq.answer.selection.test.top3'
+    # )
     # debug(sys.argv[1])
