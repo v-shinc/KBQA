@@ -221,14 +221,16 @@ class Pipeline(object):
         query_hash_to_pattern = dict()
         for i in xrange(len(queries)):
             code = queries[i]['hash']
-            query_hash_to_answers[code].add(queries[i]['answer'])
-            if code not in query_hash_to_pattern:
-                query_hash_to_pattern = queries[i]  # select one representative
 
-        for k in query_hash_to_answers.keys():
-            f1 = compute_f1(gold_answers, query_hash_to_answers[k])
-            query_hash_to_pattern['f1'] = f1
-            query_hash_to_pattern['pattern_answer'] = query_hash_to_answers[k]
+            if code not in query_hash_to_pattern:
+                query_hash_to_answers[code] = set()
+                query_hash_to_pattern[code] = queries[i]  # select one representative
+            query_hash_to_answers[code].add(queries[i]['answer'])
+
+        for hash_code in query_hash_to_answers.keys():
+            _, _, f1 = compute_f1(gold_answers, query_hash_to_answers[hash_code])
+            query_hash_to_pattern[hash_code]['f1'] = f1
+            query_hash_to_pattern[hash_code]['pattern_answer'] = list(query_hash_to_answers[hash_code])
 
         return query_hash_to_pattern.values()
 

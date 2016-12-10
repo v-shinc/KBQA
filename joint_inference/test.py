@@ -213,9 +213,9 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
                     else:
                         query_graphs[j]['label'] = 0
                     query_graphs[j]['question'] = question
-                    query_graphs[j]['qid'] = data['id']
+                    # query_graphs[j]['qid'] = data['id']
                     if query_graphs[j]['label'] == 1:
-                        complete_qids.add(data['id'])
+                        complete_qids.add(qid)
                         # print >> fout, json.dumps(g, ensure_ascii=False).encode('utf8')
 
                 # Write query pattern to file
@@ -305,4 +305,7 @@ if __name__ == '__main__':
         [],
         '../data/wq.answer.selection.test.top3'
     )
-    debug(sys.argv[1])
+
+    # gen_svm_ranker_data('../data/wq.answer.selection.train.top3', '../data/wq.train.top3.svm')
+    # debug(sys.argv[1])
+
