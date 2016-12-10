@@ -173,6 +173,27 @@ class DBManager(object):
                     ret.append([subject, first_hop[i][1]])
         return ret
 
+    @staticmethod
+    def get_object(path, constraints):
+        subject = path[0]
+
+        if not DBManager.freebase_db:
+            DBManager.freebase_db = leveldb.LevelDB(globals.config.get('LevelDB', 'freebase_db'))
+
+        first_hop = DBManager.get_one_hop_path(subject)
+        ret = set()
+        for i in xrange(len(first_hop)):
+            r1 = first_hop[i][1]
+            if r1 == path[1] and len(path) == 4:
+                mediate_node = first_hop[i][2]
+                second_hop = DBManager.get_one_hop_path(mediate_node)
+                for j in xrange(len(second_hop)):
+                    if second_hop[j][1] != path[3] or second_hop[j][2] == subject:
+                        continue
+                    ret.add(second_hop[2])
+            elif r1 == path[1]:
+                ret.add(first_hop[i][2])
+        return ret
 
 if __name__ == '__main__':
     globals.read_configuration('../config.cfg')

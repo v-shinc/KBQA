@@ -105,7 +105,7 @@ class FeatureExtractor(object):
 
         for i in xrange(len(features)):
             # Add constraint feature for CVT
-            if len(features[i]['path']) == 5:
+            if len(features[i]['path']) == 4:
                 cvt = features[i]['path'][2]
                 cons_paths = self.db_manger.get_one_hop_path(cvt)
                 features[i]['constraint_entity_in_q'] = 0
@@ -146,6 +146,14 @@ class FeatureExtractor(object):
 
         return features
 
+    def get_answer(self, path, constraints):
+        answers = self.db_manger.get_object(path)
+
+
+
+    def add_f1_score(self, path, constraints, gold_topic):
+        pass
+
     @staticmethod
     def add_rank(features, gold_topic, gold_relations):
         # if e_pred == e_gold and r_pred == r_gold => rank = 3
@@ -184,29 +192,32 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
     qids = set()
     with open(fn_out, 'w') as fout:
         # process webquestion
+        qid = 0
         for fn in fn_wq_list:
             webq = json.load(open(fn), encoding="utf8")
             for data in webq:
-
                 positive_relations = set()
                 for path in data['paths']:
                     if path[1] == "forward_pass_cvt" or path[1] == "forward_direct":
                         positive_relations.add(path[0].split()[-2])
 
                 if len(positive_relations) == 0:
+                    qid += 1
                     continue
-                qids.add(data['id'])
+
+                qids.add(qid)
                 question, features = \
-                    extractor.extract_query_feature(data['utterance'], data['id'], data['mid1'], positive_relations)
+                    extractor.extract_query_feature(data['utterance'], qid, data['mid1'], positive_relations)
 
                 for g in features:
                     g['question'] = question
                     if g['rank'] == 3:
                         complete_qids.add(data['id'])
 
-                svm_inputs = extractor.to_svm_ranker_input(features, ['mention_score', 'entity_score', 'relation_score', 'constraint_entity_in_q', 'constraint_entity_word'])
+                svm_inputs = extractor.to_svm_ranker_input(features, ['mention_score', 'entity_score', 'relation_score', 'constraint_entity_word', 'constraint_entity_word'])
                 for line in svm_inputs:
                     print >> fout, line
+                qid += 1
 
     print "total valid question", len(qids)
     print "complete question", len(complete_qids)
@@ -217,4 +228,10 @@ if __name__ == '__main__':
         ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
         [],
         '../data/wq.train.top3.svm'
+    )
+
+    gen_query_graph(
+        ['../data/wq.test.complete.v2'],
+        [],
+        '../data/wq.test.top3.svm'
     )
