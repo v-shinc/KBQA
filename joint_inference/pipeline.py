@@ -28,28 +28,22 @@ class Pipeline(object):
         """
         :param question:
         :return:
-            features: a list of feature
+            queries: a list of query
                       a feature have keys
                       ["topic", "mention", "mention score", "entity_score", "path",
                       "pattern", "answer", "relation_score", "pattern_repr", "relation_repr"]
         """
         # generate entity feature
-        question, features = self.entity_linker.get_candidate_topic_entities(question)
+        question, queries = self.entity_linker.get_candidate_topic_entities(question)
         print '[Pipeline.add_topic_feature]', question
+        return question, queries
 
-        # features = []
-        # for mid, f in candidates.iteritems():
-        #     f['topic'] = mid
-        #     features.append(f)
-
-        return question, features
-
-    def add_path_feature(self, question, features, topk=-1):
+    def add_path_feature(self, question, queries, topk=-1):
         # print '[Pipeline.add_relation_match_feature]', question
-        new_features = []
+        new_queries = []
         pattern_relation_set = set()
 
-        for f in features:
+        for f in queries:
             mid = f['topic']
             paths = self.db_manger.get_subgraph(mid)
             for path in paths:
@@ -63,11 +57,11 @@ class Pipeline(object):
                 feat['relation'] = relation
                 pattern_relation_set.add((feat['pattern'], feat['relation']))
                 feat['answer'] = answer
-                new_features.append(feat)
+                new_queries.append(feat)
 
-        if len(new_features) == 0:
+        if len(new_queries) == 0:
             return []
-        features = None
+        queries = None
         # generate pattern-relation match score, distributed representations of pattern and relation
 
         patterns = []
@@ -97,15 +91,15 @@ class Pipeline(object):
             print '[Pipeline.add_relation_match_feature] generate pattern-relation score'
             for p, r, s in itertools.izip(patterns, relations, scores):
                 relation_match_score[(p, r)] = float(s)
-        ret_features = []
-        for i in xrange(len(new_features)):
-            if (new_features[i]['pattern'], new_features[i]['relation']) in relation_match_score:
-                new_features[i]['relation_score'] = relation_match_score[(new_features[i]['pattern'], new_features[i]['relation'])]
-                ret_features.append(new_features[i])
+        ret_queries = []
+        for i in xrange(len(new_queries)):
+            if (new_queries[i]['pattern'], new_queries[i]['relation']) in relation_match_score:
+                new_queries[i]['relation_score'] = relation_match_score[(new_queries[i]['pattern'], new_queries[i]['relation'])]
+                ret_queries.append(new_queries[i])
             # features[i]['pattern_repr'] = pattern_reprs[features[i]['pattern']]
             # features[i]['relation_repr'] = relation_reprs[features[i]['relation']]
 
-        return ret_features
+        return ret_queries
 
     def get_name(self, entry):
         if entry.startswith('m.'):
@@ -119,30 +113,55 @@ class Pipeline(object):
             print entry, "has no name"
             return None
 
-    def add_constraints(self, question, features):
+    def hash_query(self, path, constraints):
+        """path contains mediator, constraints is list of triple"""
+        sequence = []
+
+        if len(path) == 2:
+            # ignore mediator and answer
+            sequence.append(path[0][0]) # subject
+            sequence.append(path[0][1]) # first relation
+            sequence.append(path[1][2]) # second relation
+            consts = set()
+            # ignore mediator
+            for c in constraints:
+                consts.add((c[1], c[2]))
+            for c in consts:
+                sequence.extend(c)
+        else:
+            # ignore answer
+            sequence.append(path[0][0]) # subject
+            sequence.append(path[0][1]) # first relation
+
+        return hash(" ".join(sequence))
+
+
+    def add_constraints(self, question, queries):
         qwords = set(question.split())
         candidates_topics = set()
-        for i in xrange(len(features)):
-            candidates_topics.add(features[i]['topic'])
+        for i in xrange(len(queries)):
+            candidates_topics.add(queries[i]['topic'])
 
-        for i in xrange(len(features)):
+        for i in xrange(len(queries)):
             # Add constraint feature for CVT
-            if len(features[i]['path']) == 2:
-                cvt = features[i]['path'][0][-1]
+            if len(queries[i]['path']) == 2:
+                cvt = queries[i]['path'][0][-1]
                 cons_paths = self.db_manger.get_one_hop_path(cvt)
-                features[i]['constraint_entity_in_q'] = 0
-                features[i]['constraint_entity_word'] = 0
-                # features[i]['constraint_entity_word_detail'] = ""
+                queries[i]['constraint_entity_in_q'] = 0
+                queries[i]['constraint_entity_word'] = 0
+                queries[i]['constraints'] = []
+                # queries[i]['constraint_entity_word_detail'] = ""
                 num_name_cross = 0
-                if len(cons_paths) > 10:
-                    continue
+                # if len(cons_paths) > 10:
+                #     continue
 
-                for _, _, obj in cons_paths:
-                    if obj == features[i]['answer'] or obj == features[i]['topic']:
+                for _, rel, obj in cons_paths:
+                    if obj == queries[i]['answer'] or obj == queries[i]['topic']:
                         continue
                     # The constraint entity occurs in the question
                     if obj in candidates_topics:
-                        features[i]['constraint_entity_in_q'] += 1
+                        queries[i]['constraint_entity_in_q'] += 1
+                        queries[i]['constraints'].append([cvt, rel, obj])
                     # Some words of the constraint entity's name appear in the question
                     # percentage of the words in the name of the constraint entity appear in the question
                     name = self.get_name(obj)
@@ -151,30 +170,30 @@ class Pipeline(object):
                     else:
                         cons_words = set(name.lower().split())
                         intersect_per = len(cons_words.intersection(qwords)) * 1.0 / len(cons_words)
-                        features[i]['constraint_entity_word'] += intersect_per
+                        queries[i]['constraint_entity_word'] += intersect_per
 
                         if intersect_per > 0:
                             num_name_cross += 1
-                            # features[i]['constraint_entity_word_detail'] += '\t'+name
+                            # queries[i]['constraint_entity_word_detail'] += '\t'+name
 
                 if num_name_cross > 0:
-                    features[i]['constraint_entity_word'] *= 1.0 / num_name_cross
+                    queries[i]['constraint_entity_word'] *= 1.0 / num_name_cross
 
             # Add constraint feature for answer
-            name = self.get_name(features[i]['answer'])
-            if not name:
-                print features[i]['answer'], "has no name!!"
-                features[i]['answer_word'] = 0
-            else:
-                answer_words = set(name.lower().split())
-                features[i]['answer_word'] = len(answer_words.intersection(qwords)) * 1.0 / len(answer_words)
+            # name = self.get_name(queries[i]['answer'])
+            # if not name:
+            #     print queries[i]['answer'], "has no name!!"
+            #     queries[i]['answer_word'] = 0
+            # else:
+            #     answer_words = set(name.lower().split())
+            #     queries[i]['answer_word'] = len(answer_words.intersection(qwords)) * 1.0 / len(answer_words)
 
-        return features
+        return queries
 
     def create_query_graph_given_topic(self, question, mention):
-        question, features = self.entity_linker.get_candidate_topic_entities_given_mention(question, mention)
-        features = self.add_path_feature(question, features)
-        return question, features
+        question, queries = self.entity_linker.get_candidate_topic_entities_given_mention(question, mention)
+        queries = self.add_path_feature(question, queries)
+        return question, queries
 
     def gen_candidate_relations(self, question):
         question, candidates = self.entity_linker.get_candidate_topic_entities(question)
@@ -186,11 +205,57 @@ class Pipeline(object):
         return question, candidate_relations
 
     def gen_candidate_query_graph(self, question):
+        question, queries = self.add_topic_feature(question)
+        queries = self.add_path_feature(question, queries, topk=3)
+        queries = self.add_constraints(question, queries)
 
-        question, features = self.add_topic_feature(question)
-        features = self.add_path_feature(question, features, topk=3)
-        features = self.add_constraints(question, features)
-        return question, features
+        for i in xrange(len(queries)):
+            queries[i]['hash'] = self.hash_query(queries[i]['path'], queries[i].get('constraints', []))
+
+        return question, queries
+
+    def extract_query_pattern_and_f1(self, queries, gold_answers):
+        if not isinstance(gold_answers, set):
+            gold_answers = set(gold_answers)
+        query_hash_to_answers = dict()
+        query_hash_to_pattern = dict()
+        for i in xrange(len(queries)):
+            code = queries[i]['hash']
+            query_hash_to_answers[code].add(queries[i]['answer'])
+            if code not in query_hash_to_pattern:
+                query_hash_to_pattern = queries[i]  # select one representative
+
+        for k in query_hash_to_answers.keys():
+            f1 = compute_f1(gold_answers, query_hash_to_answers[k])
+            query_hash_to_pattern['f1'] = f1
+            query_hash_to_pattern['pattern_answer'] = query_hash_to_answers[k]
+
+        return query_hash_to_pattern.values()
+
+    @staticmethod
+    def to_svm_ranker_input(query_pattern, keys):
+        """query_pattern must contain 'qid' """
+        f = ' '.join(["{}:{}".format(j + 1, query_pattern.get(k, 0)) for j, k in enumerate(keys)])
+        return "{} qid:{} {}".format(query_pattern['f1'], query_pattern['qid'], f)
+
+
+def compute_f1(gold_set, predict_set):
+    if not isinstance(gold_set, set):
+        gold_set = set(gold_set)
+    if not isinstance(predict_set, set):
+        predict_set = set(predict_set)
+    if len(gold_set) == 0:
+        return 0, 1, 0
+    if len(predict_set) == 0:
+        return 1, 0, 0
+
+    same = gold_set.intersection(predict_set)
+    if len(same) == 0:
+        return 0, 0, 0
+    recall = len(same) * 1.0 / len(gold_set)
+    precision = len(same) * 1.0 / len(predict_set)
+    f1 = 2 * precision * recall / (precision + recall)
+    return precision, recall, f1
 
 if __name__ == '__main__':
     pass

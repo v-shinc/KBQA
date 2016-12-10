@@ -24,7 +24,7 @@ def compute_f1(gold_set, predict_set):
 
 
 def basic_exp(fn_test, fn_res):
-    # only use entity linking module and relation match module
+    # only use entity linking module and relation matching module
     pipeline = Pipeline()
     webquestion = json.load(open(fn_test))
     gold, pred = [], []
@@ -146,46 +146,107 @@ def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn
                     "neg_relation": list(negative_relations)},
                     ensure_ascii=False).encode('utf8')
 
+
+# def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
+#     pipeline = Pipeline()
+#     complete_qids = set()
+#     qids = set()
+#     with open(fn_out, 'w') as fout:
+#         # process webquestion
+#         for fn in fn_wq_list:
+#             webq = json.load(open(fn), encoding="utf8")
+#             for data in webq:
+#
+#                 positive_relations = set()
+#                 for path in data['paths']:
+#                     if path[1] == "forward_pass_cvt" or path[1] == "forward_direct":
+#                         positive_relations.add(path[0].split()[-2])
+#
+#                 if len(positive_relations) == 0:
+#                     continue
+#                 qids.add(data['id'])
+#                 question, candidate_graphs = pipeline.gen_candidate_query_graph(data['utterance'])
+#                 gold_answers = set(data['mids'].values())
+#                 for g in candidate_graphs:
+#                     if g['topic'] == data['mid1'] and g['answer'] in gold_answers and g['relation'] in positive_relations:
+#                         g['label'] = 1
+#                     else:
+#                         g['label'] = 0
+#                     g['question'] = question
+#                     g['qid'] = data['id']
+#                     if g['label'] == 1:
+#                         complete_qids.add(data['id'])
+#                     print >> fout, json.dumps(g, ensure_ascii=False).encode('utf8')
+#     print "total valid question", len(qids)
+#     print "complete question", len(complete_qids)
+
 def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
     pipeline = Pipeline()
     complete_qids = set()
     qids = set()
     with open(fn_out, 'w') as fout:
-        # process webquestion
+        qid = 0
+
+        # Process WEBQUESTION
         for fn in fn_wq_list:
             webq = json.load(open(fn), encoding="utf8")
             for data in webq:
-
+                qid += 1
                 positive_relations = set()
                 for path in data['paths']:
                     if path[1] == "forward_pass_cvt" or path[1] == "forward_direct":
                         positive_relations.add(path[0].split()[-2])
-
                 if len(positive_relations) == 0:
                     continue
-                qids.add(data['id'])
-                question, candidate_graphs = pipeline.gen_candidate_query_graph(data['utterance'])
+                qids.add(qid)
+                question, query_graphs = pipeline.gen_candidate_query_graph(data['utterance'])
+                for j in xrange(len(query_graphs)):
+                    query_graphs[j]['qid'] = qid
                 gold_answers = set(data['mids'].values())
-                for g in candidate_graphs:
-                    if g['topic'] == data['mid1'] and g['answer'] in gold_answers and g['relation'] in positive_relations:
-                        g['label'] = 1
+                query_patterns = pipeline.extract_query_pattern_and_f1(query_graphs, gold_answers)
+
+                # Just for statistic
+                for j in xrange(len(query_graphs)):
+                    if query_graphs[j]['topic'] == data['mid1'] and query_graphs[j]['answer'] in gold_answers and \
+                                    query_graphs[j]['relation'] in positive_relations:
+                        query_graphs[j]['label'] = 1
                     else:
-                        g['label'] = 0
-                    g['question'] = question
-                    g['qid'] = data['id']
-                    if g['label'] == 1:
+                        query_graphs[j]['label'] = 0
+                    query_graphs[j]['question'] = question
+                    query_graphs[j]['qid'] = data['id']
+                    if query_graphs[j]['label'] == 1:
                         complete_qids.add(data['id'])
-                    print >> fout, json.dumps(g, ensure_ascii=False).encode('utf8')
+                        # print >> fout, json.dumps(g, ensure_ascii=False).encode('utf8')
+
+                # Write query pattern to file
+                for j in xrange(len(query_patterns)):
+                    print >> fout, json.dumps(query_patterns[j], ensure_ascii=False).encode('utf8')
     print "total valid question", len(qids)
     print "complete question", len(complete_qids)
 
+def gen_svm_ranker_data(fn_query_pattern, fn_svm):
+    pipeline = Pipeline()
+    keys = ['mention_score', 'entity_score', 'relation_score',
+            'constraint_entity_word',
+            'constraint_entity_word']
+    with open(fn_svm, 'w') as fout, open(fn_query_pattern) as fin:
+        for line in fin:
+            query_pattern = json.loads(line)
+            print >> fout, pipeline.to_svm_ranker_input(query_pattern, keys)
 
-def transform_query_garaph_to_csv(fn, fn_csv, features):
-    with open(fn_csv, 'w') as fout:
-        with open(fn) as fin:
-            for line in fin:
-                data = json.loads(line)
-                print >> fout, ' '.join([str(data.get(f, 0)) for f in features])
+def evaluate_svm_test(fn_query_pattern, fn_svm_res):
+
+    with open(fn_query_pattern) as fin:
+        query_patterns = [json.loads(line) for line in fin]
+    with open(fn_svm_res) as fin:
+        scores = [float(line) for line in fin]
+
+    qid_hash_to_query_score = dict()
+    for i in xrange(len(scores)):
+        # query_patterns[i]['score'] = scores[i]
+        qid_hash_to_query_score[(query_patterns[i]['qid'], query_patterns[i]['hash'])] = scores[i]
+
+    # How to decide answers???
 
 
 def debug(question):
@@ -216,11 +277,11 @@ if __name__ == '__main__':
     # )
 
     # Freebase is fb.triple.mini
-    gen_data_for_relation_matcher(
-        ["../data/wq.train.complete.v2", "../data/wq.dev.complete.v2"],
-        ["../data/simple.train.dev.el.v2"],
-        "../data/my_fb/relation.train"
-    )
+    # gen_data_for_relation_matcher(
+    #     ["../data/wq.train.complete.v2", "../data/wq.dev.complete.v2"],
+    #     ["../data/simple.train.dev.el.v2"],
+    #     "../data/my_fb/relation.train"
+    # )
     # Freebase is fb.triple.mini
     # gen_data_for_relation_matcher(
     #     ["../data/wq.test.complete.v2"],
@@ -234,14 +295,14 @@ if __name__ == '__main__':
     # )
 
     # Generate overall features for answer selection
-    # gen_query_graph(
-    #     ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
-    #     [],
-    #     '../data/wq.answer.selection.train.top3'
-    # )
-    # gen_query_graph(
-    #     ['../data/wq.test.complete.v2'],
-    #     [],
-    #     '../data/wq.answer.selection.test.top3'
-    # )
-    # debug(sys.argv[1])
+    gen_query_graph(
+        ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
+        [],
+        '../data/wq.answer.selection.train.top3'
+    )
+    gen_query_graph(
+        ['../data/wq.test.complete.v2'],
+        [],
+        '../data/wq.answer.selection.test.top3'
+    )
+    debug(sys.argv[1])

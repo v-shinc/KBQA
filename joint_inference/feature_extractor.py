@@ -147,7 +147,8 @@ class FeatureExtractor(object):
         return features
 
     def get_answer(self, path, constraints):
-        answers = self.db_manger.get_object(path)
+        answers = self.db_manger.get_object(path, constraints)
+        pass
 
 
 
@@ -214,7 +215,9 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
                     if g['rank'] == 3:
                         complete_qids.add(data['id'])
 
-                svm_inputs = extractor.to_svm_ranker_input(features, ['mention_score', 'entity_score', 'relation_score', 'constraint_entity_word', 'constraint_entity_word'])
+                svm_inputs = extractor.to_svm_ranker_input(features, ['mention_score', 'entity_score', 'relation_score',
+                                                                      'constraint_entity_word',
+                                                                      'constraint_entity_word'])
                 for line in svm_inputs:
                     print >> fout, line
                 qid += 1
