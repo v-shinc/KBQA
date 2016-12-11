@@ -90,4 +90,12 @@ def get_all_unichar():
     return ' '.join([unichr(i) for i in range(sys.maxunicode)])
 
 
+def map_word(x, old_word='_', new_word='<$>'):
+    if x.startswith(old_word) or x.endswith(old_word):
+        return x.replace(old_word, new_word)
+    else:
+        return x
 
+
+def replace_mention_holder(sentence, old_one='_', new_one="<$>"):
+    return ' '.join([map_word(w, old_one, new_one) for w in sentence])

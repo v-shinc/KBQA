@@ -208,6 +208,7 @@ class RelationMatcherModel:
         self.q_char_ids = tf.placeholder(tf.int32, [None, params['max_sentence_len'], params['max_word_len']], name='q_char_ids')
         self.q_word_lengths = tf.placeholder(tf.int64, [None, params['max_sentence_len']])
         self.dropout_keep_prob = tf.placeholder(tf.float32, name='dropout_keep_prob')
+        
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
             if params['encode_name'] == 'CNN':
                 question_encoder = CNNEncoder(params['question_config'], 'question_cnn')
@@ -347,8 +348,4 @@ class RelationMatcherModel:
 
     def save(self, save_path):
         return self.saver.save(self.session, save_path)
-
-
-
-
 
