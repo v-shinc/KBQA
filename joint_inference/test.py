@@ -298,12 +298,12 @@ if __name__ == '__main__':
     gen_query_graph(
         ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
         [],
-        '../data/wq.answer.selection.train.top3'
+        '../data/wq.train.top3.svm'
     )
     gen_query_graph(
         ['../data/wq.test.complete.v2'],
         [],
-        '../data/wq.answer.selection.test.top3'
+        '../data/wq.test.top3.svm'
     )
 
     # gen_svm_ranker_data('../data/wq.answer.selection.train.top3', '../data/wq.train.top3.svm')

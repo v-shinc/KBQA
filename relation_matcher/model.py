@@ -210,27 +210,27 @@ class RelationMatcherModel:
         self.dropout_keep_prob = tf.placeholder(tf.float32, name='dropout_keep_prob')
 
         if params['encode_name'] == 'CNN':
-            question_encoder = CNNEncoder(params['question_config'], 'question_cnn')
+            self.question_encoder = CNNEncoder(params['question_config'], 'question_cnn')
             # relation_encoder = CNNEncoder(params['relation_config'], 'relation_cnn')
             relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
             if 'char_dim' in params['question_config']:
-                question = question_encoder.encode(self.q_char_ids)
+                question = self.question_encoder.encode(self.q_char_ids)
             else:
-                question = question_encoder.encode(self.q_word_ids)
+                question = self.question_encoder.encode(self.q_word_ids)
             pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
             neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
 
         elif params['encode_name'] == 'ADD':
-            question_encoder = AdditionEncoder(params['question_config'], 'question_add')
+            self.question_encoder = AdditionEncoder(params['question_config'], 'question_add')
             relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
-            question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
+            question = self.question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
             pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
             neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
         elif params['encode_name'] == 'RNN':
-            question_encoder = RNNEncoder(params['question_config'], 'question_rnn')
+            self.question_encoder = RNNEncoder(params['question_config'], 'question_rnn')
             # relation_encoder = RNNEncoder(params['relation_config'], 'relation_rnn')
             relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
-            question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths, self.q_char_ids, self.q_word_lengths, False)
+            question = self.question_encoder.encode(self.q_word_ids, self.q_sentence_lengths, self.q_char_ids, self.q_word_lengths, False)
             pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
             neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
         else:
@@ -345,8 +345,4 @@ class RelationMatcherModel:
 
     def save(self, save_path):
         return self.saver.save(self.session, save_path)
-
-
-
-
 
