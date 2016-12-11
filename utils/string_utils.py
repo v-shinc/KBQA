@@ -98,4 +98,4 @@ def map_word(x, old_word='_', new_word='<$>'):
 
 
 def replace_mention_holder(sentence, old_one='_', new_one="<$>"):
-    return ' '.join([map_word(w, old_one, new_one) for w in sentence])
+    return ' '.join([map_word(w, old_one, new_one) for w in sentence.split()])

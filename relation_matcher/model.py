@@ -208,7 +208,7 @@ class RelationMatcherModel:
         self.q_char_ids = tf.placeholder(tf.int32, [None, params['max_sentence_len'], params['max_word_len']], name='q_char_ids')
         self.q_word_lengths = tf.placeholder(tf.int64, [None, params['max_sentence_len']])
         self.dropout_keep_prob = tf.placeholder(tf.float32, name='dropout_keep_prob')
-        
+
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
             if params['encode_name'] == 'CNN':
                 question_encoder = CNNEncoder(params['question_config'], 'question_cnn')
@@ -239,17 +239,17 @@ class RelationMatcherModel:
             else:
                 raise ValueError('encoder_name should be one of [CNN, ADD, RNN]')
 
-        self.question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
-        self.pos_relation_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
-        neg_relation_drop = tf.nn.dropout(neg_relation, self.dropout_keep_prob)
-        self.pos_sim = self.sim(self.question_drop, self.pos_relation_drop)
-        neg_sim = self.sim(self.question_drop, neg_relation_drop)
-        self.loss = tf.reduce_sum(tf.maximum(0., neg_sim + params['margin'] - self.pos_sim))
-        tvars = tf.trainable_variables()
-        max_grad_norm = 5
-        self.grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
-        optimizer = tf.train.AdamOptimizer(params['lr'])
-        self.train_op = optimizer.apply_gradients(zip(self.grads, tvars))
+            self.question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
+            self.pos_relation_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
+            neg_relation_drop = tf.nn.dropout(neg_relation, self.dropout_keep_prob)
+            self.pos_sim = self.sim(self.question_drop, self.pos_relation_drop)
+            neg_sim = self.sim(self.question_drop, neg_relation_drop)
+            self.loss = tf.reduce_sum(tf.maximum(0., neg_sim + params['margin'] - self.pos_sim))
+            tvars = tf.trainable_variables()
+            max_grad_norm = 5
+            self.grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
+            optimizer = tf.train.AdamOptimizer(params['lr'])
+            self.train_op = optimizer.apply_gradients(zip(self.grads, tvars))
 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -348,4 +348,13 @@ class RelationMatcherModel:
 
     def save(self, save_path):
         return self.saver.save(self.session, save_path)
+
+    def get_all_variables(self):
+        variable_names = [v.name for v in tf.all_variables()]
+        variable_values = self.session.run(tf.all_variables())
+        variable = dict()
+        for i in xrange(len(variable_names)):
+            variable[variable_names[i]] = variable_values[i].tolist()
+        return variable
+
 
