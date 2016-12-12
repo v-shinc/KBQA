@@ -1,7 +1,20 @@
 import tensorflow as tf
-from encoder import CNNEncoder, AdditionEncoder, RNNEncoder
+import encoder
 
-class RelationMatcherModel:
+def fully_connected(input, layer_sizes):
+    initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+    input_dim = tf.get_shape(input)[1]
+    layer_sizes = [input_dim] + layer_sizes
+    layers = [input]
+    for i in range(len(layer_sizes)):
+        with tf.variable_scope('fully-connected-%s' % i):
+            w = tf.get_variable('w', [layer_sizes[i-1], layer_sizes[i]], initializer=initializer)
+            b = tf.get_variable('b', [layer_sizes[i]])
+            layers.append(tf.add(tf.matmul(layers[-1], w), b))
+    return layers[-1]
+
+
+class BetaRanker:
     def __init__(self, params):
         self.pos_relation_ids = tf.placeholder(tf.int32, [None, 3])
         self.neg_relation_ids = tf.placeholder(tf.int32, [None, 3])
@@ -13,9 +26,9 @@ class RelationMatcherModel:
 
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
             if params['encode_name'] == 'CNN':
-                question_encoder = CNNEncoder(params['question_config'], 'question_cnn')
+                question_encoder = encoder.CNNEncoder(params['question_config'], 'question_cnn')
                 # relation_encoder = CNNEncoder(params['relation_config'], 'relation_cnn')
-                relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
+                relation_encoder = encoder.AdditionEncoder(params['relation_config'], 'relation_add')
                 if 'char_dim' in params['question_config']:
                     question = question_encoder.encode(self.q_char_ids)
                 else:
@@ -24,14 +37,16 @@ class RelationMatcherModel:
                 neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
 
             elif params['encode_name'] == 'ADD':
-                question_encoder = AdditionEncoder(params['question_config'], 'question_add')
-                relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
+                question_encoder = encoder.AdditionEncoder(params['question_config'], 'question_add')
+                relation_encoder = encoder.AdditionEncoder(params['relation_config'], 'relation_add')
                 question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
                 pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
                 neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
+
+
             elif params['encode_name'] == 'RNN':
-                question_encoder = RNNEncoder(params['question_config'], 'question_rnn')
-                relation_encoder = RNNEncoder(params['relation_config'], 'relation_rnn')
+                question_encoder = encoder.RNNEncoder(params['question_config'], 'question_rnn')
+                relation_encoder = encoder.RNNEncoder(params['relation_config'], 'relation_rnn')
                 # relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
                 question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths, self.q_char_ids, self.q_word_lengths, False)
                 pos_relation = relation_encoder.encode(self.pos_relation_ids, None, None, None, False)
@@ -40,6 +55,15 @@ class RelationMatcherModel:
                 # neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
             else:
                 raise ValueError('encoder_name should be one of [CNN, ADD, RNN]')
+
+            # Concat features
+            initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+            dim = tf.get_shape(question)[1]
+            bi_m = tf.get_variable('bi_m', [dim, dim])
+            self.pos_bi_sim = tf.batch_matmul(tf.matmul(question, bi_m), pos_relation, adj_y=True)
+            slef.neg_bi_sim = tf.batch_matmul(tf.matmul(question, bi_m), neg_relation, adj_y=True)
+            pos_features = tf.concat(1, [question, pos_relation, self.pos_bi_sim])
+            neg_features = tf.concat(1, [question, neg_relation, self.neg_bi_sim])
 
             self.question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
             self.pos_relation_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
@@ -158,5 +182,3 @@ class RelationMatcherModel:
         for i in xrange(len(variable_names)):
             variable[variable_names[i]] = variable_values[i].tolist()
         return variable
-
-
