@@ -1,4 +1,4 @@
-
+import tensorflow as tf
 class RNNEncoder:
     def __init__(self, params, scope):
         self.scope = scope
@@ -111,7 +111,6 @@ class CNNEncoder:
                         padding="VALID",
                         name="conv"
                     )
-                    h = tf.nn.tanh(tf.nn.bias_add(conv, b), name='sigmoid')
                     pooled = tf.nn.max_pool(
                         h,
                         ksize=[1, sequence_len - filter_size + 1, 1, 1],

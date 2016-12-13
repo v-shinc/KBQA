@@ -14,14 +14,14 @@ class RelationMatcherModel:
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
             if params['encode_name'] == 'CNN':
                 question_encoder = CNNEncoder(params['question_config'], 'question_cnn')
-                # relation_encoder = CNNEncoder(params['relation_config'], 'relation_cnn')
-                relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
+                relation_encoder = CNNEncoder(params['relation_config'], 'relation_cnn')
+                # relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
                 if 'char_dim' in params['question_config']:
                     question = question_encoder.encode(self.q_char_ids)
                 else:
                     question = question_encoder.encode(self.q_word_ids)
-                pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
-                neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
+                pos_relation = relation_encoder.encode(self.pos_relation_ids, False)
+                neg_relation = relation_encoder.encode(self.neg_relation_ids, True)
 
             elif params['encode_name'] == 'ADD':
                 question_encoder = AdditionEncoder(params['question_config'], 'question_add')
@@ -46,7 +46,7 @@ class RelationMatcherModel:
             neg_relation_drop = tf.nn.dropout(neg_relation, self.dropout_keep_prob)
             self.pos_sim = self.sim(self.question_drop, self.pos_relation_drop)
             neg_sim = self.sim(self.question_drop, neg_relation_drop)
-            self.loss = tf.reduce_sum(tf.maximum(0., neg_sim + params['margin'] - self.pos_sim))
+            self.loss = tf.reduce_mean(tf.maximum(0., neg_sim + params['margin'] - self.pos_sim))
             tvars = tf.trainable_variables()
             max_grad_norm = 5
             self.grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)

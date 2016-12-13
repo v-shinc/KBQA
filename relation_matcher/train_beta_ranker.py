@@ -5,7 +5,7 @@ import sys
 import tensorflow as tf
 from time import time
 from data_helper import DataSet
-from model import RelationMatcherModel
+from beta_ranker import BetaRanker
 from evaluete import evaluate
 import model_config
 flags = tf.flags
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     config['relation_config']['num_word'] = dataset.num_relation
     config['relation_config']['num_char'] = dataset.num_char
 
-    model = RelationMatcherModel(config)
+    model = BetaRanker(config)
 
     fout_log = open(log_path, 'a')
     with open(config_path, 'w') as fout:
@@ -57,12 +57,14 @@ if __name__ == '__main__':
         tic = time()
         lno = 0
         total_loss = 0.
+        total_margin_loss = 0.
+        total_reg_loss = 0.
         for data in dataset.train_shuffled_batch_iterator(config['fn_train'], config['batch_size']):
             if lno % 1000 == 0:
                 sys.stdout.write("Process to %d\r" % lno)
                 sys.stdout.flush()
             lno += config['batch_size']
-            loss = model.fit(
+            loss, margin_loss, reg_loss = model.fit(
                 data['word_ids'],
                 data['sentence_lengths'],
                 data['char_ids'],
@@ -72,8 +74,10 @@ if __name__ == '__main__':
                 config['dropout_keep_prob']
             )
             total_loss += loss
-            print loss
-        info = '# %s: loss = %s, it costs %ss' % (epoch_index, total_loss, time() - tic)
+            total_margin_loss += margin_loss
+            total_reg_loss += reg_loss
+        info = '# %s: loss = %s, margin_loss = %s, reg_loss = %s, it costs %ss' % (
+            epoch_index, total_loss, total_margin_loss, total_reg_loss, time() - tic)
         print info
         print >> fout_log, info
 
@@ -87,7 +91,8 @@ if __name__ == '__main__':
                 os.rename(old_path, save_path)
                 os.rename('%s.meta' % old_path, '%s.meta' % save_path)
                 print "best mode", old_path
-
         if epoch_index % 3 == 0:
             print "Evaluation over training data"
             evaluate(dataset, model, '../data/wq.aqqu.relation.train', dev_res_path)
+
+

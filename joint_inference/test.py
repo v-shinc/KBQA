@@ -124,6 +124,7 @@ def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn
                         # "neg_relation": list(negative_relations)},
                         "neg_relation": []},
                         ensure_ascii=False).encode('utf8')
+
         # process webquestion
         for fn in fn_webquestion_list:
             webquestion = json.load(open(fn), encoding="utf8")
@@ -283,11 +284,11 @@ if __name__ == '__main__':
     #     "../data/my_fb/relation.train"
     # )
     # Freebase is fb.triple.mini
-    # gen_data_for_relation_matcher(
-    #     ["../data/wq.test.complete.v2"],
-    #     [],
-    #     "../data/my_fb/wq.relation.test"
-    # )
+    gen_data_for_relation_matcher(
+        ["../data/wq.test.complete.v2"],
+        [],
+        "../data/my_fb/wq.relation.test.tmp"
+    )
     # gen_data_for_relation_matcher(
     #     [],
     #     ["../data/simple.test.el.v2"],
@@ -295,16 +296,16 @@ if __name__ == '__main__':
     # )
 
     # Generate overall features for answer selection
-    gen_query_graph(
-        ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
-        [],
-        '../data/wq.train.top3.svm'
-    )
-    gen_query_graph(
-        ['../data/wq.test.complete.v2'],
-        [],
-        '../data/wq.test.top3.svm'
-    )
+    # gen_query_graph(
+    #     ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
+    #     [],
+    #     '../data/wq.train.top3.svm'
+    # )
+    # gen_query_graph(
+    #     ['../data/wq.test.complete.v2'],
+    #     [],
+    #     '../data/wq.test.top3.svm'
+    # )
 
     # gen_svm_ranker_data('../data/wq.answer.selection.train.top3', '../data/wq.train.top3.svm')
     # debug(sys.argv[1])

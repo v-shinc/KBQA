@@ -11,7 +11,8 @@ class DBManager(object):
     type_db = None
     entity_surface_db = None
     freebase_db = None
-    mediate_relations = None
+    mediator_relations = None
+    mediator_nodes = None
 
     @staticmethod
     def get_name(mid):
@@ -88,16 +89,25 @@ class DBManager(object):
     #         return []
 
     @staticmethod
-    def is_mediate_relation(relation):
-        if not DBManager.mediate_relations:
-            DBManager.mediate_relations = set()
+    def is_mediator_relation(relation):
+        if not DBManager.mediator_relations:
+            DBManager.mediator_relations = set()
             with open(globals.config.get('FREEBASE', 'mediator-relations')) as fin:
                 for line in fin:
                     rel = line.decode('utf8').strip()
                     if not rel.startswith('m.'):
-                        DBManager.mediate_relations.add(rel)
+                        DBManager.mediator_relations.add(rel)
 
-        return relation in DBManager.mediate_relations
+        return relation in DBManager.mediator_relations
+    @staticmethod
+    def is_mediator_node(entity):
+        if not DBManager.mediator_nodes:
+            DBManager.mediator_nodes = set()
+            with open(globals.config.get('FREEBASE', 'mediator-entities')) as fin:
+                for line in fin:
+                    node = line.decode('utf8').strip()
+                    DBManager.mediator_nodes.add(node)
+        return entity in DBManager.mediator_nodes
 
     @staticmethod
     def get_subgraph(subject):
@@ -108,7 +118,7 @@ class DBManager(object):
         ret = []
         for i in xrange(len(first_hop)):
             r1 = first_hop[i][1]
-            if DBManager.is_mediate_relation(r1):
+            if DBManager.is_mediator_relation(r1) and DBManager.is_mediator_node(first_hop[i][2]):
                 mediate_node = first_hop[i][2]
                 second_hop = DBManager.get_one_hop_path(mediate_node)
                 # # if CVT node has too much neighbors, ignore it (Maybe it isn't CVT)
@@ -158,7 +168,7 @@ class DBManager(object):
         vis = set()
         for i in xrange(len(first_hop)):
             r1 = first_hop[i][1]
-            if DBManager.is_mediate_relation(r1):
+            if DBManager.is_mediator_relation(r1):
                 mediator = first_hop[i][2]
                 second_hop = DBManager.get_one_hop_path(mediator)
                 for j in xrange(len(second_hop)):

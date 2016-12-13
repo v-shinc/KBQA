@@ -1,6 +1,7 @@
 import numpy as np
 import json
 import math
+import random
 
 def load_mapping_and_count(fn_word):
     index = 0
@@ -184,6 +185,86 @@ class DataSet:
                 line = train_file.readline()
                 data = json.loads(line, encoding='utf8')
 
+                pos_rel = np.random.choice(data['pos_relation'])
+
+                pos_relation_ids = [self.sub_relation_to_id[r] for r in pos_rel.split('.')[-3:] if r in self.sub_relation_to_id]
+                if len(pos_relation_ids) != 3:
+                    continue
+
+                str_words = data['question'].split()[:self.max_sentence_len]
+                if self.word_based:
+                    # for w in str_words:
+                    #     if w not in self.word_to_id:
+                    #         print data['question']
+                    #         raise ValueError("{} not in self.word_to_id".format(w))
+                    word_ids = [self.word_to_id.get(w, self.unknown_id) for w in str_words]
+                    if len(word_ids) == 0:
+                        raise ValueError('len(word_ids) == 0')
+                    all_word_ids.append(self.pad_words(word_ids, self.word_padding))
+                all_sentence_lengths.append(len(str_words))
+                all_words.append(str_words)
+                if self.char_based:
+                    char_ids = [[self.char_to_id[c] for c in w if self.char_to_id]
+                                for w in str_words]
+                    char_ids, word_lengths = self.pad_chars(char_ids)
+                    all_char_ids.append(char_ids)
+                    all_word_lengths.append(word_lengths)
+
+                # if 'neg_relation' in data and len(data['neg_relation']) > 0:
+                # while True:
+                #     neg_rel = np.random.choice(self.relations)
+                #     if neg_rel not in data['pos_relation']:
+                #         break
+
+                # if np.random.uniform(0, 1) < tanh(len(data['neg_relation']) * 1. / 180):
+                if len(data['neg_relation']) > 0:
+                    neg_rel = np.random.choice(data['neg_relation'])
+                else:
+                    while True:
+                        neg_rel = np.random.choice(self.relations)
+                        if neg_rel not in data['pos_relation']:
+                            break
+                neg_relation_ids = [self.sub_relation_to_id[r] for r in neg_rel.split('.')[-3:]]
+                all_pos_relation_ids.append(pos_relation_ids)
+                all_neg_relation_ids.append(neg_relation_ids)
+            ret = {
+                "words": all_words,
+                "word_ids": all_word_ids,
+                "sentence_lengths": all_sentence_lengths,
+                "char_ids": all_char_ids,
+                "word_lengths": all_word_lengths,
+                "pos_relation_ids": all_pos_relation_ids,
+                "neg_relation_ids": all_neg_relation_ids
+            }
+            for k, v in ret.items():
+                ret[k] = np.array(v)
+            yield ret
+        train_file.close()
+
+    def train_shuffled_batch_iterator(self, fn_train, batch_size):
+        num = 0
+        all_data = []
+        with open(fn_train) as fin:
+            for line in fin:
+                all_data.append(json.loads(line))
+                num += 1
+        train_file = open(fn_train)
+        index = 0
+        num_batch = num // batch_size + int(num % batch_size > 0)
+        for _ in xrange(num_batch):
+            all_words = []
+            all_word_ids = []
+            all_char_ids = []
+            all_word_lengths = []
+            all_sentence_lengths = []
+            all_pos_relation_ids = []
+            all_neg_relation_ids = []
+            while len(all_words) < batch_size:
+                if index == num:
+                    random.shuffle(all_data)
+                    index = 0
+                data = all_data[index]
+                index += 1
                 pos_rel = np.random.choice(data['pos_relation'])
 
                 pos_relation_ids = [self.sub_relation_to_id[r] for r in pos_rel.split('.')[-3:] if r in self.sub_relation_to_id]
