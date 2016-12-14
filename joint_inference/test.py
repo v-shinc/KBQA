@@ -284,11 +284,11 @@ if __name__ == '__main__':
     #     "../data/my_fb/relation.train"
     # )
     # Freebase is fb.triple.mini
-    gen_data_for_relation_matcher(
-        ["../data/wq.test.complete.v2"],
-        [],
-        "../data/my_fb/wq.relation.test.tmp"
-    )
+    # gen_data_for_relation_matcher(
+    #     ["../data/wq.test.complete.v2"],
+    #     [],
+    #     "../data/my_fb/wq.relation.test.tmp"
+    # )
     # gen_data_for_relation_matcher(
     #     [],
     #     ["../data/simple.test.el.v2"],
@@ -296,11 +296,11 @@ if __name__ == '__main__':
     # )
 
     # Generate overall features for answer selection
-    # gen_query_graph(
-    #     ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
-    #     [],
-    #     '../data/wq.train.top3.svm'
-    # )
+    gen_query_graph(
+        ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
+        [],
+        '../data/wq.train.top3.svm'
+    )
     # gen_query_graph(
     #     ['../data/wq.test.complete.v2'],
     #     [],

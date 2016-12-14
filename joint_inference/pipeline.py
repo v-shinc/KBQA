@@ -6,6 +6,8 @@ import heapq
 import itertools
 import copy
 import globals
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import stopwords
 from tagger.predict import EntityLinker, EntityMentionTagger
 from relation_matcher.predict import RelationMatcher
 from kb_manager.db_manager import DBManager
@@ -23,6 +25,15 @@ class Pipeline(object):
 
         # self.freebase = FreebaseClient()
         self.db_manger = DBManager()
+        self.lemma = dict()
+        self.lemmatiser = WordNetLemmatizer()
+        self.stopwords = set(stopwords.words('english'))
+
+    def _get_lemma(self, word):
+        if word not in self.lemma:
+            self.lemma[word] = self.lemmatiser.lemmatize(word)
+        return self.lemma[word]
+
 
     def add_topic_feature(self, question):
         """
@@ -30,15 +41,26 @@ class Pipeline(object):
         :return:
             queries: a list of query
                       a feature have keys
-                      ["topic", "mention", "mention score", "entity_score", "path",
-                      "pattern", "answer", "relation_score", "pattern_repr", "relation_repr"]
+                      ["topic", "topic_name", "mention", "mention score", "entity_score"]
         """
         # generate entity feature
         question, queries = self.entity_linker.get_candidate_topic_entities(question)
+        for i in xrange(len(queries)):
+            name = self.get_name(queries[i]['mid'])
+            if name == None:
+                raise ValueError("Topic name is None")
+            queries[i]['topic_name'] = name
         print '[Pipeline.add_topic_feature]', question
         return question, queries
 
-    def add_path_feature(self, question, queries, topk=-1):
+    def add_path_feature(self, question, queries, topk=-1, include_relation_score=True):
+        """
+        :param question:
+        :return:
+            queries: a list of query
+                      the increased feature keys are
+                      ["path", "relation", "pattern", "relation_score", "answer"]
+        """
         # print '[Pipeline.add_relation_match_feature]', question
         new_queries = []
         pattern_relation_set = set()
@@ -55,6 +77,10 @@ class Pipeline(object):
                 feat['path'] = path
                 feat['pattern'] = question.replace(f['mention'], '<$>')
                 feat['relation'] = relation
+                relation_lemmas = [self.lemmatiser.lemmatize(w) for w in relation.split('.')[-1].split('_')]
+                pattern_lemmas = [self.lemmatiser.lemmatize(w) for w in feat['pattern'].split()]
+                feat['pattern_lemma'] = ' '.join(pattern_lemmas)
+                feat['rel_pat_overlap'] = 1. if set(relation_lemmas - self.stopwords).intersection(set(pattern_lemmas)) else 0.
                 pattern_relation_set.add((feat['pattern'], feat['relation']))
                 feat['answer'] = answer
                 new_queries.append(feat)
@@ -63,43 +89,43 @@ class Pipeline(object):
             return []
         queries = None
         # generate pattern-relation match score, distributed representations of pattern and relation
+        if include_relation_score:
+            patterns = []
+            relations = []
+            for p, r in pattern_relation_set:
+                patterns.append(p)
+                relations.append(r)
 
-        patterns = []
-        relations = []
-        for p, r in pattern_relation_set:
-            patterns.append(p)
-            relations.append(r)
+            scores, pattern_reprs, relation_reprs = self.relation_matcher.get_batch_match_score(patterns, relations)
+            # pattern_reprs = dict(zip(patterns, pattern_reprs))
+            # relation_reprs = dict(zip(relations, relation_reprs))
+            relation_match_score = dict()
+            if topk > 0:
+                # use pattern-relation score to filter
+                pq = []
+                for i, s in enumerate(scores):
+                    s = float(s)
 
-        scores, pattern_reprs, relation_reprs = self.relation_matcher.get_batch_match_score(patterns, relations)
-        # pattern_reprs = dict(zip(patterns, pattern_reprs))
-        # relation_reprs = dict(zip(relations, relation_reprs))
-        relation_match_score = dict()
-        if topk > 0:
-            # use pattern-relation score to filter
-            pq = []
-            for i, s in enumerate(scores):
-                s = float(s)
-                # if s < 0:
-                #     continue
-                if len(pq) < topk:
-                    pq.append([s, i])
-                elif pq[0][0] < s:
-                    heapq.heapreplace(pq, [s, i])
-            for s, i in pq:
-                relation_match_score[(patterns[i], relations[i])] = s
+                    if len(pq) < topk:
+                        pq.append([s, i])
+                    elif pq[0][0] < s:
+                        heapq.heapreplace(pq, [s, i])
+                for s, i in pq:
+                    relation_match_score[(patterns[i], relations[i])] = s
+            else:
+                print '[Pipeline.add_relation_match_feature] generate pattern-relation score'
+                for p, r, s in itertools.izip(patterns, relations, scores):
+                    relation_match_score[(p, r)] = float(s)
+            ret_queries = []
+            for i in xrange(len(new_queries)):
+                if (new_queries[i]['pattern'], new_queries[i]['relation']) in relation_match_score:
+                    new_queries[i]['relation_score'] = relation_match_score[(new_queries[i]['pattern'], new_queries[i]['relation'])]
+                    ret_queries.append(new_queries[i])
+                # features[i]['pattern_repr'] = pattern_reprs[features[i]['pattern']]
+                # features[i]['relation_repr'] = relation_reprs[features[i]['relation']]
+            return ret_queries
         else:
-            print '[Pipeline.add_relation_match_feature] generate pattern-relation score'
-            for p, r, s in itertools.izip(patterns, relations, scores):
-                relation_match_score[(p, r)] = float(s)
-        ret_queries = []
-        for i in xrange(len(new_queries)):
-            if (new_queries[i]['pattern'], new_queries[i]['relation']) in relation_match_score:
-                new_queries[i]['relation_score'] = relation_match_score[(new_queries[i]['pattern'], new_queries[i]['relation'])]
-                ret_queries.append(new_queries[i])
-            # features[i]['pattern_repr'] = pattern_reprs[features[i]['pattern']]
-            # features[i]['relation_repr'] = relation_reprs[features[i]['relation']]
-
-        return ret_queries
+            return new_queries
 
     def get_name(self, entry):
         if entry.startswith('m.'):
@@ -206,7 +232,7 @@ class Pipeline(object):
 
     def gen_candidate_query_graph(self, question):
         question, queries = self.add_topic_feature(question)
-        queries = self.add_path_feature(question, queries, topk=3)
+        queries = self.add_path_feature(question, queries, topk=-1)
         queries = self.add_constraints(question, queries)
 
         for i in xrange(len(queries)):
@@ -231,7 +257,7 @@ class Pipeline(object):
             _, _, f1 = compute_f1(gold_answers, query_hash_to_answers[hash_code])
             query_hash_to_pattern[hash_code]['f1'] = f1
             query_hash_to_pattern[hash_code]['pattern_answer'] = list(query_hash_to_answers[hash_code])
-
+            query_hash_to_pattern[hash_code]['num_answer'] = len(query_hash_to_answers[hash_code])
         return query_hash_to_pattern.values()
 
     @staticmethod
