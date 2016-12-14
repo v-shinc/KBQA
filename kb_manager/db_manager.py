@@ -118,7 +118,7 @@ class DBManager(object):
         ret = []
         for i in xrange(len(first_hop)):
             r1 = first_hop[i][1]
-            if DBManager.is_mediator_relation(r1) and DBManager.is_mediator_node(first_hop[i][2]):
+            if DBManager.is_mediator_relation(r1): #and DBManager.is_mediator_node(first_hop[i][2]):
                 mediate_node = first_hop[i][2]
                 second_hop = DBManager.get_one_hop_path(mediate_node)
                 # # if CVT node has too much neighbors, ignore it (Maybe it isn't CVT)

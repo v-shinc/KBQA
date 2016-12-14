@@ -5,7 +5,7 @@ import sys
 import tensorflow as tf
 from time import time
 from data_helper import DataSet
-from beta_ranker import BetaRanker
+from relation_beta_ranker import BetaRanker
 from evaluete import evaluate
 import model_config
 flags = tf.flags

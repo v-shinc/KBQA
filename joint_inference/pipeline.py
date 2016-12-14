@@ -46,7 +46,7 @@ class Pipeline(object):
         # generate entity feature
         question, queries = self.entity_linker.get_candidate_topic_entities(question)
         for i in xrange(len(queries)):
-            name = self.get_name(queries[i]['mid'])
+            name = self.get_name(queries[i]['topic'])
             if name == None:
                 raise ValueError("Topic name is None")
             queries[i]['topic_name'] = name
@@ -145,9 +145,9 @@ class Pipeline(object):
 
         if len(path) == 2:
             # ignore mediator and answer
-            sequence.append(path[0][0]) # subject
-            sequence.append(path[0][1]) # first relation
-            sequence.append(path[1][2]) # second relation
+            sequence.append(path[0][0])  # subject
+            sequence.append(path[0][1])  # first relation
+            sequence.append(path[1][2])  # second relation
             consts = set()
             # ignore mediator
             for c in constraints:
@@ -156,8 +156,8 @@ class Pipeline(object):
                 sequence.extend(c)
         else:
             # ignore answer
-            sequence.append(path[0][0]) # subject
-            sequence.append(path[0][1]) # first relation
+            sequence.append(path[0][0])  # subject
+            sequence.append(path[0][1])  # first relation
 
         return hash(" ".join(sequence))
 

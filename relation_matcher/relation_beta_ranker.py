@@ -34,14 +34,14 @@ class BetaRanker:
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
             if params['encode_name'] == 'CNN':
                 question_encoder = encoder.CNNEncoder(params['question_config'], 'question_cnn')
-                relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
-                # relation_encoder = encoder.AdditionEncoder(params['relation_config'], 'relation_add')
+                # relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
+                relation_encoder = encoder.AdditionEncoder(params['relation_config'], 'relation_add')
                 if 'char_dim' in params['question_config']:
                     question = question_encoder.encode(self.q_char_ids)
                 else:
                     question = question_encoder.encode(self.q_word_ids)
-                pos_relation = relation_encoder.encode(self.pos_relation_ids, False)
-                neg_relation = relation_encoder.encode(self.neg_relation_ids, True)
+                pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
+                neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
 
             elif params['encode_name'] == 'ADD':
                 with tf.variable_scope('semantic_layer', regularizer=tf.contrib.layers.l2_regularizer(params['embedding_l2_scale'])):
@@ -50,6 +50,9 @@ class BetaRanker:
                     question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
                     pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
                     neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
+                    question = question / tf.sqrt(tf.reduce_sum(question ** 2, 1, keep_dims=True))
+                    pos_relation = pos_relation / tf.sqrt(tf.reduce_sum(pos_relation ** 2, 1, keep_dims=True))
+                    neg_relation = neg_relation / tf.sqrt(tf.reduce_sum(neg_relation ** 2, 1, keep_dims=True))
 
             elif params['encode_name'] == 'RNN':
                 question_encoder = encoder.RNNEncoder(params['question_config'], 'question_rnn')
@@ -67,6 +70,7 @@ class BetaRanker:
             # Concat features
             initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
             dim = question.get_shape()[1]
+
 
             question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
             pos_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
