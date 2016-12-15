@@ -71,7 +71,6 @@ class BetaRanker:
             initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
             dim = question.get_shape()[1]
 
-
             question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
             pos_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
             neg_drop = tf.nn.dropout(neg_relation, self.dropout_keep_prob)

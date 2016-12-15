@@ -48,7 +48,8 @@ class Pipeline(object):
         for i in xrange(len(queries)):
             name = self.get_name(queries[i]['topic'])
             if name == None:
-                raise ValueError("Topic name is None")
+                continue
+                # raise ValueError("Topic name is None")
             queries[i]['topic_name'] = name
         print '[Pipeline.add_topic_feature]', question
         return question, queries
@@ -80,7 +81,7 @@ class Pipeline(object):
                 relation_lemmas = [self.lemmatiser.lemmatize(w) for w in relation.split('.')[-1].split('_')]
                 pattern_lemmas = [self.lemmatiser.lemmatize(w) for w in feat['pattern'].split()]
                 feat['pattern_lemma'] = ' '.join(pattern_lemmas)
-                feat['rel_pat_overlap'] = 1. if set(relation_lemmas - self.stopwords).intersection(set(pattern_lemmas)) else 0.
+                feat['rel_pat_overlap'] = 1. if (set(relation_lemmas) - self.stopwords).intersection(set(pattern_lemmas)) else 0.
                 pattern_relation_set.add((feat['pattern'], feat['relation']))
                 feat['answer'] = answer
                 new_queries.append(feat)
@@ -147,7 +148,7 @@ class Pipeline(object):
             # ignore mediator and answer
             sequence.append(path[0][0])  # subject
             sequence.append(path[0][1])  # first relation
-            sequence.append(path[1][2])  # second relation
+            sequence.append(path[1][1])  # second relation
             consts = set()
             # ignore mediator
             for c in constraints:
@@ -192,7 +193,7 @@ class Pipeline(object):
                     # percentage of the words in the name of the constraint entity appear in the question
                     name = self.get_name(obj)
                     if not name:
-                        print obj, "has no name!"
+                        print "constraint", obj, "has no name!"
                     else:
                         cons_words = set(name.lower().split())
                         intersect_per = len(cons_words.intersection(qwords)) * 1.0 / len(cons_words)
