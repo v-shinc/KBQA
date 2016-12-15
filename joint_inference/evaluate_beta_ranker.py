@@ -18,22 +18,30 @@ def evaluate(dataset, model, fn_dev, fn_res):
             sys.stdout.write("Process to %d\r" % lno)
             sys.stdout.flush()
         lno += 1
+
         scores = model.predict(
             data['pattern_word_ids'],
             data['sentence_lengths'],
-            data['pattern_char_ids'],
-            data['word_lengths'],
+            None,  # TODO: support pattern char-based feature
+            None,
             data['relation_ids'],
             data['mention_char_ids'],
             data['topic_char_ids'],
             data['extras']
         )
+
+        scores = scores.tolist()
+        rank = sorted(zip(scores, data['paths']), key=lambda x: x[0], reverse=True)
+        print >> res_file, data['question']
+        for i in xrange(len(scores)):
+            print >> res_file, rank[i][1], rank[i][0]
         best_index = -100000
         best_predicted_score = -1
         for i in xrange(len(scores)):
             if scores[i] > best_predicted_score:
                 best_index = i
                 best_predicted_score = scores[i]
+
         average_f1 += data['f1'][best_index]
         count += 1
         gold_index = -100000
@@ -43,17 +51,18 @@ def evaluate(dataset, model, fn_dev, fn_res):
                 gold_score = data['f1'][i]
                 gold_index = i
         rank_index = 1
-        for s in data['f1']:
-            if s > data['f1'][gold_index]:
+        for s in scores:
+            if s > scores[gold_index]:
                 rank_index += 1
         average_rank += rank_index
 
         average_candidate_count += len(scores)
         if res_file:
-            indices = sorted(range(scores), key=lambda i: data['f1'][i], reverse=True)
+            indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
             print >> res_file, data['question']
             for j in indices:
-                print >> res_file, data['pattern_words'][j], data['mention'][j], data['paths'][j], data['extras'][j]
+                print >> res_file, scores[j], data['f1'][j], data['pattern_words'][j], data['mentions'][j], data['paths'][j], ' '.join(map(str, data['extras'][j]))
+            print >> res_file
     average_f1 *= 1.0 / count
     average_candidate_count *= 1.0 / count
     average_rank = average_rank * 1.0 / count

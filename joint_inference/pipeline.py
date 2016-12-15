@@ -45,14 +45,16 @@ class Pipeline(object):
         """
         # generate entity feature
         question, queries = self.entity_linker.get_candidate_topic_entities(question)
+        ret_queries = []
         for i in xrange(len(queries)):
             name = self.get_name(queries[i]['topic'])
             if name == None:
                 continue
                 # raise ValueError("Topic name is None")
             queries[i]['topic_name'] = name
+            ret_queries.append(queries[i])
         print '[Pipeline.add_topic_feature]', question
-        return question, queries
+        return question, ret_queries
 
     def add_path_feature(self, question, queries, topk=-1, include_relation_score=True):
         """
