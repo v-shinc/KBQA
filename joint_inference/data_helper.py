@@ -40,8 +40,10 @@ class DataSet:
                 index = len(self.word_to_id)
                 self.word_to_id['<$>'] = index
                 self.id_to_word[index] = '<$>'
-            self.unknown_id = len(self.word_to_id)
-            self.word_padding = len(self.word_to_id) + 1
+            index = len(self.word_to_id)
+            self.word_to_id['<UNK>'] = index
+            self.id_to_word['index'] = '<UNK>'
+            self.word_padding = len(self.word_to_id)
 
         self.char_based = False
         self.max_sentence_len = params['max_sentence_len']
@@ -78,10 +80,11 @@ class DataSet:
         for qid in self.qid_to_rank:
             self.qid_to_rank[qid] = sorted(self.qid_to_rank[qid], key=lambda h: self.queries[(qid, h)]['f1'],
                                            reverse=True)  # sort rank according to f1 score
+        self.qids = self.qid_to_rank.keys()
 
     @property
     def num_word(self):
-        return len(self.word_to_id) + 2 if self.word_based else 0
+        return len(self.word_to_id) + 1 if self.word_based else 0
 
     @property
     def num_char(self):
@@ -103,7 +106,7 @@ class DataSet:
 
         # pattern VS relation
         if self.word_based:
-            parsed['pattern_word_ids'] = [self.word_to_id.get(w, self.unknown_id) for w in data['pattern'].split()]
+            parsed['pattern_word_ids'] = [self.word_to_id.get(w if w in self.word_to_id else '<UNK>') for w in data['pattern'].split()]
 
         if self.char_based:
             parsed['pattern_char_ids'] = [[self.char_to_id[c] for c in w if self.char_to_id]
@@ -138,6 +141,8 @@ class DataSet:
             "relation_ids": [],
             "mention_char_ids": [],
             "topic_char_ids": [],
+            "mention_lengths": [],
+            "topic_lengths": [],
             "extras": [],
             "f1": [],
             "pattern_words": [],
@@ -168,6 +173,8 @@ class DataSet:
                 ret['relation_ids'].append(parsed['relation_ids'])
                 ret['mention_char_ids'].append(self.pad_words(parsed['mention_char_ids'], self.max_name_len, self.char_padding))
                 ret['topic_char_ids'].append(self.pad_words(parsed['topic_char_ids'], self.max_name_len, self.char_padding))
+                ret['mention_lengths'].append(len(parsed['mention_char_ids']))
+                ret['topic_lengths'].append(len(parsed['topic_char_ids']))
                 ret['extras'].append(parsed['extra'])
                 ret['f1'].append(parsed['f1'])
                 ret['pattern_words'].append(data['pattern'])
@@ -180,69 +187,94 @@ class DataSet:
 
     def train_batch_iterator(self, batch_size):
         index = 0
-        qids = self.qid_to_rank.keys()
 
         num_batch = self.num // batch_size + int(self.num % batch_size > 0)
+
+        all_pattern_word_ids = [[], []]
+        all_sentence_lengths = [[], []]
+        all_relation_ids = [[], []]
+        all_mention_char_ids = [[], []]
+        all_topic_char_ids = [[], []]
+        all_mention_lengths = [[], []]
+        all_topic_lengths = [[], []]
+        all_extras = [[], []]
+
+        def wrap(pair):
+            for i in [0, 1]:
+                all_sentence_lengths[i].append(len(pair[i]['pattern_word_ids']))
+                all_pattern_word_ids[i].append(
+                    self.pad_words(pair[i]['pattern_word_ids'], self.max_sentence_len, self.word_padding))
+                all_relation_ids[i].append(pair[i]['relation_ids'])
+                all_mention_char_ids[i].append(
+                    self.pad_words(pair[i]['mention_char_ids'], self.max_name_len, self.char_padding))
+                all_topic_char_ids[i].append(
+                    self.pad_words(pair[i]['topic_char_ids'], self.max_name_len, self.char_padding))
+                all_mention_lengths[i].append(len(pair[i]['mention_char_ids']))
+                all_topic_lengths[i].append(len(pair[i]['topic_char_ids']))
+                all_extras[i].append(pair[i]['extra'])
+
         for _ in xrange(num_batch):
-            all_pattern_word_ids = []
-            all_sentence_lengths = []
-            all_relation_ids = []
-            all_mention_char_ids = []
-            all_topic_char_ids = []
-            all_extras = []
-
-            def wrap(qs):
-                all_sentence_lengths.append([len(qs[i]['pattern_word_ids']) for i in [0, 1]])
-                all_pattern_word_ids.append([self.pad_words(qs[i]['pattern_word_ids'], self.max_sentence_len, self.word_padding) for i in [0, 1]])
-                all_relation_ids.append([qs[i]['relation_ids'] for i in [0, 1]])
-                all_mention_char_ids.append([self.pad_words(qs[i]['mention_char_ids'], self.max_name_len, self.char_padding) for i in [0, 1]])
-                all_topic_char_ids.append([self.pad_words(qs[i]['topic_char_ids'], self.max_name_len, self.char_padding) for i in [0, 1]])
-                all_extras.append([qs[i]['extra'] for i in [0, 1]])
-
-            while len(all_relation_ids) < batch_size:
+            all_pattern_word_ids = [[], []]
+            all_sentence_lengths = [[], []]
+            all_relation_ids = [[], []]
+            all_mention_char_ids = [[], []]
+            all_topic_char_ids = [[], []]
+            all_mention_lengths = [[], []]
+            all_topic_lengths = [[], []]
+            all_extras = [[], []]
+            num_diff_question = 0
+            while num_diff_question < batch_size:
                 if index == self.num:
-                    random.shuffle(qids)
                     index = 0
-                qid = qids[index]
+                    random.shuffle(self.qids)
+
+                qid = self.qids[index]
                 index += 1
 
                 pairs = []
                 if len(self.qid_to_rank[qid]) < 2:
                     print 'len(qid_to_rank[{}])'.format(qid), "< 2"
-                # while j < len(self.qid_to_rank[qid]) - 1:
-                #     h1 = self.qid_to_rank[qid][j]
-                #     h2 = self.qid_to_rank[qid][j+1]
-                #     if self.queries[(qid, h2)]['f1'] == 0.:
-                #         break
-                #     if self.queries[(qid, h1)]['f1'] > self.queries[(qid, h2)]['f1']:
-                #         pairs.append((h1, h2))
-                #     j += 1
-                # num_pos = min(3, j)
-                # if num_pos == 0:
-                #     continue
-                # pairs.extend(zip(self.qid_to_rank[qid][:num_pos], random.sample(self.qid_to_rank[qid][j:], num_pos)))
+
                 for i in xrange(len(self.qid_to_rank[qid])):
-                    for j in xrange(len(self.qid_to_rank[qid])):
-                        h1 = self.qid_to_rank[qid][i]
+                    for j in xrange(i+1, len(self.qid_to_rank[qid])):
+                        h1 = self.qid_to_rank[qid][0]
                         h2 = self.qid_to_rank[qid][j]
                         if self.queries[(qid, h1)]['f1'] > self.queries[(qid, h2)]['f1']:
-                            # pairs.append((h1, h2))
-                            wrap([self.queries[(qid, h1)], self.queries[(qid, h2)]])
-
-                # for h1, h2 in random.sample(pairs, min(len(pairs), 20)):
-                #     wrap([self.queries[(qid, h1)], self.queries[(qid, h2)]])
+                            pairs.append((h1, h2))
+                            # wrap([self.queries[(qid, h1)], self.queries[(qid, h2)]])
+                if len(pairs) == 0:
+                    continue
+                k = 5
+                if len(pairs) > k:
+                    pairs = random.sample(pairs, k)
+                # wrap([self.queries[(qid, one[0][0])], self.queries[(qid, one[0][1])]])
+                for h1, h2 in pairs:
+                    wrap([self.queries[(qid, h1)], self.queries[(qid, h2)]])
+                num_diff_question += 1
             ret = {
                 "pattern_word_ids": all_pattern_word_ids,
                 "sentence_lengths": all_sentence_lengths,
                 "relation_ids": all_relation_ids,
                 "mention_char_ids": all_mention_char_ids,
                 "topic_char_ids": all_topic_char_ids,
+                "mention_lengths": all_mention_lengths,
+                "topic_lengths": all_topic_lengths,
                 "extras": all_extras,
             }
-
             for k, v in ret.items():
                 ret[k] = np.array(v)
             yield ret
+
+    def recover(self, data):
+
+        pattern_words = [[' '.join([self.id_to_word[w] for w in s if w in self.id_to_word]) for s in case] for case in data['pattern_word_ids']]
+        print "pattern"
+        print pattern_words
+        print "sentence_lengths"
+        print data['sentence_lengths']
+        relation_words = [['.'.join([self.id_to_sub_relation[sr] for sr in r]) for r in case]for case in data['relation_ids']]
+        print "relations"
+        print relation_words
 
     def pad_chars(self, char_ids, max_word_len):
         char_ids = char_ids[:self.max_sentence_len]

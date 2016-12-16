@@ -35,7 +35,7 @@ class BetaRanker:
             if params['encode_name'] == 'CNN':
                 question_encoder = encoder.CNNEncoder(params['question_config'], 'question_cnn')
                 # relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
-                relation_encoder = encoder.AdditionEncoder(params['relation_config'], 'relation_add')
+                relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
                 if 'char_dim' in params['question_config']:
                     question = question_encoder.encode(self.q_char_ids)
                 else:
@@ -45,8 +45,8 @@ class BetaRanker:
 
             elif params['encode_name'] == 'ADD':
                 with tf.variable_scope('semantic_layer', regularizer=tf.contrib.layers.l2_regularizer(params['embedding_l2_scale'])):
-                    question_encoder = encoder.AdditionEncoder(params['question_config'], 'question_add')
-                    relation_encoder = encoder.AdditionEncoder(params['relation_config'], 'relation_add')
+                    question_encoder = encoder.ADDEncoder(params['question_config'], 'question_add')
+                    relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
                     question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
                     pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
                     neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)

@@ -39,7 +39,8 @@ if __name__ == '__main__':
     config["pattern_config"]['num_char'] = dataset.num_char
     config['relation_config']['num_word'] = dataset.num_relation
     config['relation_config']['num_char'] = dataset.num_char
-    config['topic_config']['num_word'] = dataset.num_char  # this is char-based
+    if 'topic_config' in config:
+        config['topic_config']['num_word'] = dataset.num_char  # this is char-based
     model = BetaRanker(config)
 
     fout_log = open(log_path, 'a')
@@ -64,7 +65,7 @@ if __name__ == '__main__':
                 sys.stdout.write("Process to %d\r" % lno)
                 sys.stdout.flush()
             lno += config['batch_size']
-            
+
             loss, margin_loss, reg_loss = model.fit(
                 data['pattern_word_ids'],
                 data['sentence_lengths'],
@@ -73,6 +74,8 @@ if __name__ == '__main__':
                 data['relation_ids'],
                 data['mention_char_ids'],
                 data['topic_char_ids'],
+                data['mention_lengths'],
+                data['topic_lengths'],
                 data['extras'],
                 config['dropout_keep_prob']
             )

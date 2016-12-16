@@ -28,7 +28,7 @@ def gen_description_data(fn_wq_list, fn_out):
                     neg_entities.add(mid)
                 else:
                     print mid, e.name, data['utterance']
-            neg_entities -= set([data['mid1']] )
+            neg_entities -= set([data['mid1']])
             instance = {'q': data['utterance'], 'pos': data['mid1'], 'neg': list(neg_entities)}
             print >> fout, json.dumps(instance, ensure_ascii=False).encode('utf8')
     fout.close()

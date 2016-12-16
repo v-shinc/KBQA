@@ -27,6 +27,8 @@ def evaluate(dataset, model, fn_dev, fn_res):
             data['relation_ids'],
             data['mention_char_ids'],
             data['topic_char_ids'],
+            data['mention_lengths'],
+            data['topic_lengths'],
             data['extras']
         )
 

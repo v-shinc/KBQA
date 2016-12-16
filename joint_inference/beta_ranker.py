@@ -13,6 +13,8 @@ optimizer_map = {
     'sgd': tf.train.GradientDescentOptimizer,
     "adam": tf.train.AdamOptimizer
 }
+
+
 def fully_connected(input, hidden_layer_sizes, activations, reuse):
     initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
     input_dim = input.get_shape()[1]
@@ -46,13 +48,14 @@ class BetaRanker:
                                  for i in range(2)]
         self.topic_char_ids = [tf.placeholder(tf.int32, [None, max_name_len])
                                for i in range(2)]
+        self.mention_lengths = [tf.placeholder(tf.int32, [None]) for i in range(2)]
+        self.topic_lengths = [tf.placeholder(tf.int32, [None]) for i in range(2)]
         self.extras = [tf.placeholder(tf.float32, [None, len(params['extra_keys'])])
                        for i in range(2)]
         self.dropout_keep_prob = tf.placeholder(tf.float32, name='dropout_keep_prob')
 
+        features = [[], []]
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
-
-
             if params['relation_encoder'] == 'ADD':
                 with tf.variable_scope('semantic_layer', regularizer=tf.contrib.layers.l2_regularizer(params['embedding_l2_scale'])):
                     pattern_encoder = encoder.ADDEncoder(params['pattern_config'], 'pattern_add')
@@ -81,19 +84,25 @@ class BetaRanker:
 
 
             # Use char-based CNN or RNN to encode mention and topic name
-            # if params['topic_encoder'] == 'CNN':
-            #     char_encoder = encoder.CNNEncoder(params['topic_config'], 'char_cnn')
-            #     topics = [char_encoder.encode(self.topic_char_ids[i], i == 1) for i in range(2)]
-            #     mentions = [char_encoder.encode(self.mention_char_ids[i], True) for i in range(2)]
-            # elif params['topic_encoder'] == 'RNN':
-            #     char_encoder = encoder.RNNEncoder(params['topic_config'], 'char_cnn')
-            #     topics = [char_encoder.encode(self.topic_char_ids[i], None, None, None, i == 1) for i in range(2)]
-            #     mentions = [char_encoder.encode(self.mention_char_ids[i], None, None, None, True) for i in range(2)]
-            # else:
-            #     raise ValueError('topic_encoder should be one of [CNN, RNN]')
-            #
-            # topic_mention_scores = [tf.expand_dims(self.cosine_sim(topics[i], mentions[i]), dim=1) for i in range(2)]
-
+            if 'topic_encoder' in params:
+                if params['topic_encoder'] == 'CNN':
+                    char_encoder = encoder.CNNEncoder(params['topic_config'], 'char_cnn')
+                    topics = [char_encoder.encode(self.topic_char_ids[i], i == 1) for i in range(2)]
+                    mentions = [char_encoder.encode(self.mention_char_ids[i], True) for i in range(2)]
+                elif params['topic_encoder'] == 'RNN':
+                    char_encoder = encoder.RNNEncoder(params['topic_config'], 'char_cnn')
+                    topics = [char_encoder.encode(self.topic_char_ids[i], self.topic_lengths[i], None, None, i == 1, max_pool=False) for i in range(2)]
+                    mentions = [char_encoder.encode(self.mention_char_ids[i], self.mention_lengths[i], None, None, True, max_pool=False) for i in range(2)]
+                else:
+                    raise ValueError('topic_encoder should be one of [CNN, RNN]')
+                topics_drops = [tf.nn.dropout(topics[i], self.dropout_keep_prob) for i in range(2)]
+                mentions_drops = [tf.nn.dropout(mentions[i], self.dropout_keep_prob) for i in range(2)]
+                topic_mention_scores = [tf.expand_dims(self.cosine_sim(topics_drops[i], mentions_drops[i]), dim=1) for i in range(2)]
+                for i in [0, 1]:
+                    features[i].append(topic_mention_scores[i])
+                    if params['topic_config']['use_repr']:
+                        features[i].append(topics_drops[i])
+                        features[i].append(mentions_drops[i])
             # Dropout
             pat_drops = [tf.nn.dropout(patterns[i], self.dropout_keep_prob) for i in range(2)]
             rel_drops = [tf.nn.dropout(relations[i], self.dropout_keep_prob) for i in range(2)]
@@ -104,10 +113,14 @@ class BetaRanker:
             with tf.variable_scope('bilinear_sim', regularizer=tf.contrib.layers.l2_regularizer(params['l2_scale'])):
                 bi_m = tf.get_variable('bi_m', [dim, dim], initializer=initializer)
                 self.bi_sims = [tf.reduce_sum(tf.mul(tf.matmul(pat_drops[i], bi_m), rel_drops[i]), 1, keep_dims=True) for i in range(2)]
+            for i in [0, 1]:
+                features[i].append(pat_drops[i])
+                features[i].append(rel_drops[i])
+                features[i].append(self.bi_sims[i])
+                features[i].append(self.extras[i])
 
             # Concat features
-            # features = [tf.concat(1, [pat_drops[i], rel_drops[i], self.bi_sims[i], topics[i], mentions[i], topic_mention_scores[i], self.extras[i]]) for i in range(2)]
-            features = [tf.concat(1, [pat_drops[i], rel_drops[i], self.bi_sims[i]]) for i in range(2)]
+            features = [tf.concat(1, features[i]) for i in range(2)]
 
             # Fully connected layer
             with tf.variable_scope('hidden_layer', regularizer=tf.contrib.layers.l2_regularizer(params['l2_scale'])):
@@ -165,6 +178,8 @@ class BetaRanker:
             relation_ids,
             mention_char_ids,
             topic_char_ids,
+            mention_lengths,
+            topic_lengths,
             extras,
             dropout_keep_prob):
         feed_dict = dict()
@@ -183,6 +198,8 @@ class BetaRanker:
             feed_dict[self.relation_ids[i]] = relation_ids[i]
             feed_dict[self.mention_char_ids[i]] = mention_char_ids[i]
             feed_dict[self.topic_char_ids[i]] = topic_char_ids[i]
+            feed_dict[self.mention_lengths[i]] = mention_lengths[i]
+            feed_dict[self.topic_lengths[i]] = topic_lengths[i]
             feed_dict[self.extras[i]] = extras[i]
 
         feed_dict[self.dropout_keep_prob] = dropout_keep_prob
@@ -198,6 +215,8 @@ class BetaRanker:
                 relation_id,
                 mention_char_id,
                 topic_char_id,
+                mention_lengths,
+                topic_lengths,
                 extras):
         feed_dict = dict()
         if 'word_dim' in self.params['pattern_config']:
@@ -212,6 +231,8 @@ class BetaRanker:
         feed_dict[self.relation_ids[0]] = relation_id
         feed_dict[self.mention_char_ids[0]] = mention_char_id
         feed_dict[self.topic_char_ids[0]] = topic_char_id
+        feed_dict[self.mention_lengths[0]] = mention_lengths
+        feed_dict[self.topic_lengths[0]] = topic_lengths
         feed_dict[self.extras[0]] = extras
         return self.session.run(self.scores[0], feed_dict)
     #
