@@ -56,7 +56,7 @@ class BetaRanker:
 
         features = [[], []]
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
-            if params['relation_encoder'] == 'ADD':
+            if params['relation_config']['encoder'] == 'ADD':
                 with tf.variable_scope('semantic_layer', regularizer=tf.contrib.layers.l2_regularizer(params['embedding_l2_scale'])):
                     pattern_encoder = encoder.ADDEncoder(params['pattern_config'], 'pattern_add')
                     relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
@@ -65,7 +65,7 @@ class BetaRanker:
                     relations = [relation_encoder.encode(self.relation_ids[i], None, i==1) for i in range(2)]
                     patterns = [patterns[i] / tf.sqrt(tf.reduce_sum(patterns[i] ** 2, 1, keep_dims=True)) for i in range(2)]
                     relations = [relations[i] / tf.sqrt(tf.reduce_sum(relations[i] ** 2, 1, keep_dims=True)) for i in range(2)]
-            # elif params['relation_encoder'] == 'CNN':
+            # elif params['relation_config']['encoder'] == 'CNN':
             #     pattern_encoder = encoder.CNNEncoder(params['pattern_config'], 'pattern_cnn')
             #     # relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
             #     relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
@@ -74,7 +74,7 @@ class BetaRanker:
             #     else:
             #         patterns = [pattern_encoder.encode(self.pattern_word_ids, i == 1) for i in range(2)]
             #     relations = [relation_encoder.encode(self.relation_ids[i], None, i == 1) for i in range(2)]
-            # elif params['relation_encoder'] == 'RNN':
+            # elif params['relation_config']['encoder'] == 'RNN':
             #     pattern_encoder = encoder.RNNEncoder(params['pattern_config'], 'pattern_rnn')
             #     relation_encoder = encoder.RNNEncoder(params['relation_config'], 'relation_rnn')
             #     patterns = [pattern_encoder.encode(self.pattern_word_ids, self.sentence_lengths, self.pattern_char_ids, self.word_lengths, i == 1) for i in range(2)]
@@ -84,12 +84,12 @@ class BetaRanker:
 
 
             # Use char-based CNN or RNN to encode mention and topic name
-            if 'topic_encoder' in params:
-                if params['topic_encoder'] == 'CNN':
+            if 'topic_config' in params:
+                if params['topic_config']['encoder'] == 'CNN':
                     char_encoder = encoder.CNNEncoder(params['topic_config'], 'char_cnn')
                     topics = [char_encoder.encode(self.topic_char_ids[i], i == 1) for i in range(2)]
                     mentions = [char_encoder.encode(self.mention_char_ids[i], True) for i in range(2)]
-                elif params['topic_encoder'] == 'RNN':
+                elif params['topic_config']['encoder'] == 'RNN':
                     char_encoder = encoder.RNNEncoder(params['topic_config'], 'char_cnn')
                     topics = [char_encoder.encode(self.topic_char_ids[i], self.topic_lengths[i], None, None, i == 1, max_pool=False) for i in range(2)]
                     mentions = [char_encoder.encode(self.mention_char_ids[i], self.mention_lengths[i], None, None, True, max_pool=False) for i in range(2)]
@@ -196,10 +196,11 @@ class BetaRanker:
 
         for i in [0, 1]:
             feed_dict[self.relation_ids[i]] = relation_ids[i]
-            feed_dict[self.mention_char_ids[i]] = mention_char_ids[i]
-            feed_dict[self.topic_char_ids[i]] = topic_char_ids[i]
-            feed_dict[self.mention_lengths[i]] = mention_lengths[i]
-            feed_dict[self.topic_lengths[i]] = topic_lengths[i]
+            if "topic_config" in self.params:
+                feed_dict[self.mention_char_ids[i]] = mention_char_ids[i]
+                feed_dict[self.topic_char_ids[i]] = topic_char_ids[i]
+                feed_dict[self.mention_lengths[i]] = mention_lengths[i]
+                feed_dict[self.topic_lengths[i]] = topic_lengths[i]
             feed_dict[self.extras[i]] = extras[i]
 
         feed_dict[self.dropout_keep_prob] = dropout_keep_prob
@@ -229,10 +230,11 @@ class BetaRanker:
             feed_dict[self.word_lengths[0]] = word_length
         feed_dict[self.dropout_keep_prob] = 1
         feed_dict[self.relation_ids[0]] = relation_id
-        feed_dict[self.mention_char_ids[0]] = mention_char_id
-        feed_dict[self.topic_char_ids[0]] = topic_char_id
-        feed_dict[self.mention_lengths[0]] = mention_lengths
-        feed_dict[self.topic_lengths[0]] = topic_lengths
+        if "topic_config" in self.params:
+            feed_dict[self.mention_char_ids[0]] = mention_char_id
+            feed_dict[self.topic_char_ids[0]] = topic_char_id
+            feed_dict[self.mention_lengths[0]] = mention_lengths
+            feed_dict[self.topic_lengths[0]] = topic_lengths
         feed_dict[self.extras[0]] = extras
         return self.session.run(self.scores[0], feed_dict)
     #

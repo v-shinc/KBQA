@@ -97,12 +97,13 @@ class DataSet:
     def _parse(self, data):
         parsed = dict()
         # mention VS topic name
-        parsed['mention_char_ids'] = [self.char_to_id[c] for c in data['mention'].lower() if c in self.char_to_id]
-        if 'topic_name' not in data:
-            if data['f1'] > 0:
-                print "topic name not in", data['question']
-            return None
-        parsed['topic_char_ids'] = [self.char_to_id[c] for c in data['topic_name'].lower() if c in self.char_to_id]
+        if "topic_config" in self.params:
+            parsed['mention_char_ids'] = [self.char_to_id[c] for c in data['mention'].lower() if c in self.char_to_id]
+            if 'topic_name' not in data:
+                if data['f1'] > 0:
+                    print "topic name not in", data['question']
+                return None
+            parsed['topic_char_ids'] = [self.char_to_id[c] for c in data['topic_name'].lower() if c in self.char_to_id]
 
         # pattern VS relation
         if self.word_based:
@@ -171,10 +172,11 @@ class DataSet:
                 ret['sentence_lengths'].append(len(parsed['pattern_word_ids']))
                 ret['pattern_word_ids'].append(self.pad_words(parsed['pattern_word_ids'], self.max_sentence_len, self.word_padding))
                 ret['relation_ids'].append(parsed['relation_ids'])
-                ret['mention_char_ids'].append(self.pad_words(parsed['mention_char_ids'], self.max_name_len, self.char_padding))
-                ret['topic_char_ids'].append(self.pad_words(parsed['topic_char_ids'], self.max_name_len, self.char_padding))
-                ret['mention_lengths'].append(len(parsed['mention_char_ids']))
-                ret['topic_lengths'].append(len(parsed['topic_char_ids']))
+                if "topic_config" in self.params:
+                    ret['mention_char_ids'].append(self.pad_words(parsed['mention_char_ids'], self.max_name_len, self.char_padding))
+                    ret['topic_char_ids'].append(self.pad_words(parsed['topic_char_ids'], self.max_name_len, self.char_padding))
+                    ret['mention_lengths'].append(len(parsed['mention_char_ids']))
+                    ret['topic_lengths'].append(len(parsed['topic_char_ids']))
                 ret['extras'].append(parsed['extra'])
                 ret['f1'].append(parsed['f1'])
                 ret['pattern_words'].append(data['pattern'])
@@ -205,12 +207,13 @@ class DataSet:
                 all_pattern_word_ids[i].append(
                     self.pad_words(pair[i]['pattern_word_ids'], self.max_sentence_len, self.word_padding))
                 all_relation_ids[i].append(pair[i]['relation_ids'])
-                all_mention_char_ids[i].append(
-                    self.pad_words(pair[i]['mention_char_ids'], self.max_name_len, self.char_padding))
-                all_topic_char_ids[i].append(
-                    self.pad_words(pair[i]['topic_char_ids'], self.max_name_len, self.char_padding))
-                all_mention_lengths[i].append(len(pair[i]['mention_char_ids']))
-                all_topic_lengths[i].append(len(pair[i]['topic_char_ids']))
+                if "topic_config" in self.params:
+                    all_mention_char_ids[i].append(
+                        self.pad_words(pair[i]['mention_char_ids'], self.max_name_len, self.char_padding))
+                    all_topic_char_ids[i].append(
+                        self.pad_words(pair[i]['topic_char_ids'], self.max_name_len, self.char_padding))
+                    all_mention_lengths[i].append(len(pair[i]['mention_char_ids']))
+                    all_topic_lengths[i].append(len(pair[i]['topic_char_ids']))
                 all_extras[i].append(pair[i]['extra'])
 
         for _ in xrange(num_batch):

@@ -11,7 +11,7 @@ configuration['001'] = {
     "activations": ["sigmoid", "sigmoid"],
     "max_sentence_len": 33,
     "max_word_len": 22,
-    "max_name_len": 22,
+    "max_name_len": 50,
     "reload": False,
     "num_epoch": 300,
     "batch_size": 20,    # number of question per batch
@@ -21,12 +21,13 @@ configuration['001'] = {
     "lr": 0.001,
     "optimizer": 'adam',
     "margin": 0.1,
-    "relation_encoder": "ADD",
     "pattern_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD"
     },
     "relation_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD"
     },
     "extra_keys": []
 }
@@ -43,7 +44,7 @@ configuration['002'] = {
     "activations": ["sigmoid", "sigmoid"],
     "max_sentence_len": 33,
     "max_word_len": 22,
-    "max_name_len": 22,
+    "max_name_len": 50,
     "reload": False,
     "num_epoch": 300,
     "batch_size": 20,
@@ -53,19 +54,21 @@ configuration['002'] = {
     "lr": 0.001,
     "optimizer": 'adam',
     "margin": 0.1,
-    "relation_encoder": "ADD",
     "pattern_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD"
     },
     "relation_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD"
     },
     "topic_encoder": "RNN",
     "topic_config": {
         "word_dim": 25,  # this is char-rnn
         "word_rnn_dim": 25,
         "word_bidirect": False,
-        "use_repr": False
+        "use_repr": False,
+        "encoder": "RNN"
     },
     "extra_keys": []
 }
@@ -83,7 +86,7 @@ configuration['003'] = {
     "activations": ["sigmoid", "sigmoid"],
     "max_sentence_len": 33,
     "max_word_len": 22,
-    "max_name_len": 22,
+    "max_name_len": 50,
     "reload": False,
     "num_epoch": 300,
     "batch_size": 20,
@@ -93,12 +96,13 @@ configuration['003'] = {
     "lr": 0.001,
     "optimizer": 'adam',
     "margin": 0.1,
-    "relation_encoder": "ADD",
     "pattern_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD",
     },
     "relation_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD",
     },
     "extra_keys": ['entity_score', 'constraint_entity_in_q', 'constraint_entity_word', 'rel_pat_overlap', 'num_answer']
 }
@@ -115,7 +119,7 @@ configuration['004'] = {
     "activations": ["sigmoid", "sigmoid"],
     "max_sentence_len": 33,
     "max_word_len": 22,
-    "max_name_len": 22,
+    "max_name_len": 50,
     "reload": False,
     "num_epoch": 300,
     "batch_size": 20,
@@ -125,19 +129,20 @@ configuration['004'] = {
     "lr": 0.001,
     "optimizer": 'adam',
     "margin": 0.1,
-    "relation_encoder": "ADD",
     "pattern_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD"
     },
     "relation_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD"
     },
-    "topic_encoder": "RNN",
     "topic_config": {
         "word_dim": 25,  # this is char-rnn
         "word_rnn_dim": 25,
         "word_bidirect": False,
-        "use_repr": False
+        "use_repr": False,
+        "encoder": "RNN"
     },
     "extra_keys": ['entity_score', 'constraint_entity_in_q', 'constraint_entity_word', 'rel_pat_overlap', 'num_answer']
 }
@@ -154,7 +159,7 @@ configuration['005'] = {
     "activations": ["sigmoid", "sigmoid"],
     "max_sentence_len": 33,
     "max_word_len": 22,
-    "max_name_len": 22,
+    "max_name_len": 50,
     "reload": False,
     "num_epoch": 300,
     "batch_size": 20,
@@ -164,15 +169,16 @@ configuration['005'] = {
     "lr": 0.001,
     "optimizer": 'adam',
     "margin": 0.1,
-    "relation_encoder": "ADD",
     "pattern_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD"
     },
     "relation_config": {
-        "word_dim": 50
+        "word_dim": 50,
+        "encoder": "ADD"
     },
-    "topic_encoder": "RNN",
     "topic_config": {
+        "encoder": "RNN",
         "word_dim": 25,  # this is char-rnn
         "word_rnn_dim": 25,
         "word_bidirect": False,

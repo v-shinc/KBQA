@@ -47,11 +47,11 @@ if __name__ == '__main__':
     with open(config_path, 'w') as fout:
         print >> fout, json.dumps(config)
 
-    best_p_at_1 = 0
+    best_f1 = 0
     if "fn_dev" in config:
-        p_at_1, average_rank, num_avg_candidates, eval_info = \
+        f1, average_rank, num_avg_candidates, eval_info = \
             evaluate(dataset, model, config['fn_dev'], dev_res_path)
-        best_p_at_1 = p_at_1
+        best_f1 = f1
         print >> fout_log, eval_info
 
     for epoch_index in xrange(config['num_epoch']):
@@ -89,11 +89,11 @@ if __name__ == '__main__':
 
         old_path = model.save("%s-%s" % (save_path, epoch_index))
         if config['fn_dev']:
-            p_at_1, average_rank, num_avg_candidates, eval_info = \
+            f1, average_rank, num_avg_candidates, eval_info = \
                 evaluate(dataset, model, config['fn_dev'], dev_res_path)
             print >> fout_log, eval_info
-            if p_at_1 > best_p_at_1:
-                best_p_at_1 = p_at_1
+            if f1 > best_f1:
+                best_f1 = f1
                 os.rename(old_path, save_path)
                 os.rename('%s.meta' % old_path, '%s.meta' % save_path)
                 print "best mode", old_path
