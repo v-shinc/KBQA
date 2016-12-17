@@ -72,7 +72,7 @@ if __name__ == '__main__':
                 config['dropout_keep_prob']
             )
             total_loss += loss
-            print loss
+
         info = '# %s: loss = %s, it costs %ss' % (epoch_index, total_loss, time() - tic)
         print info
         print >> fout_log, info

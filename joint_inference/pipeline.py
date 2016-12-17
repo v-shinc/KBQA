@@ -9,6 +9,7 @@ import globals
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 from tagger.predict import EntityLinker, EntityMentionTagger
+from entity_linker.aqqu_entity_linker import AqquEntityLinker
 from relation_matcher.predict import RelationMatcher
 from kb_manager.db_manager import DBManager
 # from kb_manager.mm_freebase import MemoryFreebaseHelper
@@ -18,10 +19,16 @@ globals.read_configuration('../config.cfg')
 
 class Pipeline(object):
 
-    def __init__(self):
+    def __init__(self, use_aqqu=False):
         self.relation_matcher = RelationMatcher(globals.config.get('BetaAnswer', 'relation-matcher'))
-        mention_tagger = EntityMentionTagger(globals.config.get('BetaAnswer', 'entity-mention-tagger'))
-        self.entity_linker = EntityLinker(mention_tagger)
+        if use_aqqu:
+            print "Start initializing Aqqu entity linker..."
+            self.entity_linker = AqquEntityLinker()
+            print "Finish"
+        else:
+            print "Start initializing deep CRF entity linker..."
+            mention_tagger = EntityMentionTagger(globals.config.get('BetaAnswer', 'entity-mention-tagger'))
+            self.entity_linker = EntityLinker(mention_tagger)
 
         # self.freebase = FreebaseClient()
         self.db_manger = DBManager()
@@ -193,10 +200,14 @@ class Pipeline(object):
                         queries[i]['constraints'].append([cvt, rel, obj])
                     # Some words of the constraint entity's name appear in the question
                     # percentage of the words in the name of the constraint entity appear in the question
+
+                    # TODO：aqqu return date and year without ^^date and ^^gYear
                     name = self.get_name(obj)
+
                     if not name:
                         print "constraint", obj, "has no name!"
                     else:
+
                         cons_words = set(name.lower().split())
                         intersect_per = len(cons_words.intersection(qwords)) * 1.0 / len(cons_words)
                         queries[i]['constraint_entity_word'] += intersect_per

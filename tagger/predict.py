@@ -215,6 +215,7 @@ class EntityLinker(object):
         return question, candidates
 
     def get_candidate_topic_entities(self, sentence):
+        # TODO: support gYear gDate
         """
         Returns:
             candidates: list of dict

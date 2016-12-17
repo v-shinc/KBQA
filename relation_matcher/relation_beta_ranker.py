@@ -34,14 +34,14 @@ class BetaRanker:
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
             if params['encode_name'] == 'CNN':
                 question_encoder = encoder.CNNEncoder(params['question_config'], 'question_cnn')
-                # relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
-                relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
+                relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
+                #relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
                 if 'char_dim' in params['question_config']:
                     question = question_encoder.encode(self.q_char_ids)
                 else:
                     question = question_encoder.encode(self.q_word_ids)
-                pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
-                neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
+                pos_relation = relation_encoder.encode(self.pos_relation_ids, False)
+                neg_relation = relation_encoder.encode(self.neg_relation_ids, True)
 
             elif params['encode_name'] == 'ADD':
                 with tf.variable_scope('semantic_layer', regularizer=tf.contrib.layers.l2_regularizer(params['embedding_l2_scale'])):
@@ -86,7 +86,7 @@ class BetaRanker:
             with tf.variable_scope('hidden_layer', regularizer=tf.contrib.layers.l2_regularizer(params['l2_scale'])):
                 self.pos_score = tf.squeeze(fully_connected(pos_features, params['hidden_layer_sizes'], params['activations'], False),
                                             squeeze_dims=[1])
-                neg_score = tf.squeeze(fully_connected(neg_features, params['hidden_layer_sizes'], params['activations'], True),
+                self.neg_score = tf.squeeze(fully_connected(neg_features, params['hidden_layer_sizes'], params['activations'], True),
                                        squeeze_dims=[1])
             # neg_score = neg_bi_sim
             # self.pos_score = self.pos_bi_sim
@@ -95,7 +95,7 @@ class BetaRanker:
                 self.reg_loss = tf.constant(0.)
             else:
                 self.reg_loss = tf.add_n(reg_vars)
-            self.margin_loss = tf.reduce_mean(tf.maximum(0., neg_score + params['margin'] - self.pos_score))
+            self.margin_loss = tf.reduce_mean(tf.maximum(0., self.neg_score + params['margin'] - self.pos_score))
             self.loss = self.reg_loss + self.margin_loss
             # tvars = tf.trainable_variables()
             # max_grad_norm = 5
@@ -153,7 +153,9 @@ class BetaRanker:
         feed_dict[self.dropout_keep_prob] = dropout_keep_prob
         feed_dict[self.pos_relation_ids] = pos_relation_ids
         feed_dict[self.neg_relation_ids] = neg_relation_ids
-        _, loss, margin_loss, reg_loss = self.session.run([self.train_op, self.loss, self.margin_loss, self.reg_loss], feed_dict)
+        _, loss, margin_loss, reg_loss, pos_scores, neg_scores = self.session.run([self.train_op, self.loss, self.margin_loss, self.reg_loss, self.pos_score, self.neg_score], feed_dict)
+        print pos_scores
+        print neg_scores
         return loss, margin_loss, reg_loss
 
     def predict(self,

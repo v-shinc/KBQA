@@ -181,9 +181,10 @@ def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn
 #     print "total valid question", len(qids)
 #     print "complete question", len(complete_qids)
 
-def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
-    pipeline = Pipeline()
+def gen_query_graph(fn_wq_list, fn_simple_list, fn_out, use_aqqu=False):
+    pipeline = Pipeline(use_aqqu)
     complete_qids = set()
+    topic_complete_qids = set()
     qids = set()
     with open(fn_out, 'w') as fout:
         qid = 0
@@ -213,6 +214,8 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
                         query_graphs[j]['label'] = 1
                     else:
                         query_graphs[j]['label'] = 0
+                    if query_graphs[j]['topic'] == data['mid1']:
+                        topic_complete_qids.add(qid)
                     query_graphs[j]['question'] = question
                     # query_graphs[j]['qid'] = data['id']
                     if query_graphs[j]['label'] == 1:
@@ -224,6 +227,7 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
                     print >> fout, json.dumps(query_patterns[j], ensure_ascii=False).encode('utf8')
     print "total valid question", len(qids)
     print "complete question", len(complete_qids)
+    print "%s questions can be correctly linked" % len(topic_complete_qids)
 
 def gen_svm_ranker_data(fn_query_pattern, fn_svm):
     pipeline = Pipeline()
@@ -296,16 +300,24 @@ if __name__ == '__main__':
     # )
 
     # Generate overall features for answer selection
-    gen_query_graph(
-        ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
-        ['../data/simple.train.dev.el.v2'],
-        '../data/ranker/wq.train.ranker'
-    )
+    # gen_query_graph(
+    #     ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
+    #     ['../data/simple.train.dev.el.v2'],
+    #     '../data/ranker/wq.train.ranker'
+    # )
     # gen_query_graph(
     #     ['../data/wq.test.complete.v2'],
     #     [],
     #     '../data/ranker/wq.test.ranker'
     # )
+
+    # Generate ovarall features using AQQU entity linker
+    gen_query_graph(
+        ['../data/wq.test.complete.v2'],
+        [],
+        '../data/ranker/wq.aqqu.test.ranker',
+        True
+    )
 
     # gen_svm_ranker_data('../data/wq.answer.selection.train.top3', '../data/wq.train.top3.svm')
     # debug(sys.argv[1])

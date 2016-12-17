@@ -2,7 +2,7 @@ import sys
 sys.path.insert(0, '../')
 import tensorflow as tf
 from relation_matcher import encoder
-
+import numpy as np
 activation_map = {
     "tanh": tf.nn.tanh,
     "sigmoid": tf.nn.sigmoid,
@@ -87,19 +87,19 @@ class BetaRanker:
             if 'topic_config' in params:
                 if params['topic_config']['encoder'] == 'CNN':
                     char_encoder = encoder.CNNEncoder(params['topic_config'], 'char_cnn')
-                    topics = [char_encoder.encode(self.topic_char_ids[i], i == 1) for i in range(2)]
-                    mentions = [char_encoder.encode(self.mention_char_ids[i], True) for i in range(2)]
+                    self.topics = [char_encoder.encode(self.topic_char_ids[i], i == 1) for i in range(2)]
+                    self.mentions = [char_encoder.encode(self.mention_char_ids[i], True) for i in range(2)]
                 elif params['topic_config']['encoder'] == 'RNN':
                     char_encoder = encoder.RNNEncoder(params['topic_config'], 'char_cnn')
-                    topics = [char_encoder.encode(self.topic_char_ids[i], self.topic_lengths[i], None, None, i == 1, max_pool=False) for i in range(2)]
-                    mentions = [char_encoder.encode(self.mention_char_ids[i], self.mention_lengths[i], None, None, True, max_pool=False) for i in range(2)]
+                    self.topics = [char_encoder.encode(self.topic_char_ids[i], self.topic_lengths[i], None, None, i == 1, max_pool=False) for i in range(2)]
+                    self.mentions = [char_encoder.encode(self.mention_char_ids[i], self.mention_lengths[i], None, None, True, max_pool=False) for i in range(2)]
                 else:
                     raise ValueError('topic_encoder should be one of [CNN, RNN]')
-                topics_drops = [tf.nn.dropout(topics[i], self.dropout_keep_prob) for i in range(2)]
-                mentions_drops = [tf.nn.dropout(mentions[i], self.dropout_keep_prob) for i in range(2)]
-                topic_mention_scores = [tf.expand_dims(self.cosine_sim(topics_drops[i], mentions_drops[i]), dim=1) for i in range(2)]
+                topics_drops = [tf.nn.dropout(self.topics[i], self.dropout_keep_prob) for i in range(2)]
+                mentions_drops = [tf.nn.dropout(self.mentions[i], self.dropout_keep_prob) for i in range(2)]
+                self.topic_mention_scores = [tf.expand_dims(self.cosine_sim(topics_drops[i], mentions_drops[i]), dim=1) for i in range(2)]
                 for i in [0, 1]:
-                    features[i].append(topic_mention_scores[i])
+                    features[i].append(self.topic_mention_scores[i])
                     if params['topic_config']['use_repr']:
                         features[i].append(topics_drops[i])
                         features[i].append(mentions_drops[i])

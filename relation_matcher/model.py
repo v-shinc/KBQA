@@ -1,6 +1,6 @@
 import tensorflow as tf
-from encoder import CNNEncoder, AdditionEncoder, RNNEncoder
-
+from encoder import CNNEncoder, ADDEncoder, RNNEncoder
+import numpy as np
 class RelationMatcherModel:
     def __init__(self, params):
         self.pos_relation_ids = tf.placeholder(tf.int32, [None, 3])
@@ -24,8 +24,8 @@ class RelationMatcherModel:
                 neg_relation = relation_encoder.encode(self.neg_relation_ids, True)
 
             elif params['encode_name'] == 'ADD':
-                question_encoder = AdditionEncoder(params['question_config'], 'question_add')
-                relation_encoder = AdditionEncoder(params['relation_config'], 'relation_add')
+                question_encoder = ADDEncoder(params['question_config'], 'question_add')
+                relation_encoder = ADDEncoder(params['relation_config'], 'relation_add')
                 question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
                 pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
                 neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
@@ -43,12 +43,12 @@ class RelationMatcherModel:
 
             self.question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
             self.pos_relation_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
-            neg_relation_drop = tf.nn.dropout(neg_relation, self.dropout_keep_prob)
+            self.neg_relation_drop = tf.nn.dropout(neg_relation, self.dropout_keep_prob)
             self.pos_sim = self.sim(self.question_drop, self.pos_relation_drop)
-            neg_sim = self.sim(self.question_drop, neg_relation_drop)
-            self.loss = tf.reduce_mean(tf.maximum(0., neg_sim + params['margin'] - self.pos_sim))
+            self.neg_sim = self.sim(self.question_drop, self.neg_relation_drop)
+            self.loss = tf.reduce_mean(tf.maximum(0., self.neg_sim + params['margin'] - self.pos_sim))
             tvars = tf.trainable_variables()
-            max_grad_norm = 5
+            max_grad_norm = 2
             self.grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), max_grad_norm)
             optimizer = tf.train.AdamOptimizer(params['lr'])
             self.train_op = optimizer.apply_gradients(zip(self.grads, tvars))
@@ -93,12 +93,15 @@ class RelationMatcherModel:
 
         if 'char_dim' in self.params['question_config']:
             feed_dict[self.q_char_ids] = question_char_ids
+
             feed_dict[self.q_word_lengths] = question_word_lengths
 
         feed_dict[self.dropout_keep_prob] = dropout_keep_prob
         feed_dict[self.pos_relation_ids] = pos_relation_ids
         feed_dict[self.neg_relation_ids] = neg_relation_ids
-        _, loss = self.session.run([self.train_op, self.loss], feed_dict)
+        _, loss, pos_sim, neg_sim = self.session.run([self.train_op, self.loss, self.pos_sim, self.neg_sim], feed_dict)
+        #print "pos", pos_sim
+        #print "neg", neg_sim
         return loss
 
     def predict(self,
@@ -119,11 +122,15 @@ class RelationMatcherModel:
 
         feed_dict[self.dropout_keep_prob] = 1
         feed_dict[self.pos_relation_ids] = relation_ids
-
+        feed_dict[self.neg_relation_ids] = relation_ids
         if include_repr:
-            return self.session.run([self.pos_sim, self.question_drop, self.pos_relation_drop], feed_dict)
+            return self.session.run([self.neg_sim, self.question_drop, self.pos_relation_drop], feed_dict)
         else:
-            return self.session.run(self.pos_sim, feed_dict)
+            pos_sim, neg_sim = self.session.run([self.pos_sim, self.neg_sim], feed_dict)
+            # if np.sum(np.abs(pos_sim - neg_sim)) != 0:
+            #     print np.sum(np.abs(pos_sim - neg_sim))
+
+            return pos_sim
 
     def get_question_repr(self,
                           question_word_ids,
