@@ -56,7 +56,13 @@ class DataSet:
         relation_to_id, _ = load_mapping(params['fn_relation'])
         self.relations = [r for r in relation_to_id.keys() if len(r.split('.')) == 3]
         self.params = params
-
+        self.use_rel_position = "use_position" in params['question_config'] and params['question_config']
+        self.use_pat_position = "use_position" in params['relation_config'] and params['relation_config']
+        self.pattern_dim = params['question_config']['word_dim']
+        self.relation_dim = params['relation_config']['word_dim']
+        self.relation_position = None
+        if self.use_rel_position:
+            self.relation_position = self.pattern_position(self.relation_dim, 3)
 
     @property
     def num_word(self):
@@ -69,6 +75,14 @@ class DataSet:
     @property
     def num_relation(self):
         return len(self.sub_relation_to_id)
+
+    def get_pattern_position(self, dim, length):
+        vecs = [np.zeros(dim) for i in xrange(self.max_sentence_len)]
+        for i in xrange(length):
+            for j in xrange(dim):
+                v = i * d * 1. / (j * length)
+                vecs[i][j] = min(v, 1. / v)
+        return vecs
 
     def create_model_input(self, patterns, relations):
         all_word_ids = []
@@ -105,6 +119,7 @@ class DataSet:
         }
         return ret
 
+
     def test_iterator(self, fn_dev):
         with open(fn_dev) as fin:
             for line in fin:
@@ -114,7 +129,8 @@ class DataSet:
                 all_word_lengths = []
                 all_relations = []
                 all_relation_ids = []
-
+                all_pattern_position = []
+                all_relation_position = []
                 data = json.loads(line, encoding='utf8')
 
                 # handle positive relation
@@ -142,6 +158,11 @@ class DataSet:
                         raise ValueError('len(word_ids) == 0')
                     all_word_ids = [self.pad_words(word_ids, self.word_padding)] * len(all_relation_ids)
                 all_sentence_lengths = [len(str_words)] * len(all_relation_ids)
+                if self.use_pat_position:
+                    all_pattern_position.append(self.get_pattern_position(self.pattern_dim, len(str_words)))
+
+                if self.use_rel_position:
+                    all_relation_postition.append(self.relation_position)
 
                 if self.char_based:
                     char_ids = [[self.char_to_id[c] for c in w if self.char_to_id]
@@ -177,6 +198,8 @@ class DataSet:
             all_sentence_lengths = []
             all_pos_relation_ids = []
             all_neg_relation_ids = []
+            all_relation_postition = []
+            all_pattern_position = []
             while len(all_words) < batch_size:
                 if index == num:
                     train_file.seek(0)
@@ -191,6 +214,7 @@ class DataSet:
                 if len(pos_relation_ids) != 3:
                     continue
 
+
                 str_words = data['question'].split()[:self.max_sentence_len]
                 if self.word_based:
                     # for w in str_words:
@@ -202,6 +226,12 @@ class DataSet:
                         raise ValueError('len(word_ids) == 0')
                     all_word_ids.append(self.pad_words(word_ids, self.word_padding))
                 all_sentence_lengths.append(len(str_words))
+                if self.use_pat_position:
+                    all_pattern_position.append(self.get_pattern_position(self.pattern_dim, len(str_words)))
+
+                if self.use_rel_position:
+                    all_relation_postition.append(self.relation_position)
+
                 all_words.append(str_words)
                 if self.char_based:
                     char_ids = [[self.char_to_id[c] for c in w if self.char_to_id]
@@ -234,7 +264,9 @@ class DataSet:
                 "char_ids": all_char_ids,
                 "word_lengths": all_word_lengths,
                 "pos_relation_ids": all_pos_relation_ids,
-                "neg_relation_ids": all_neg_relation_ids
+                "neg_relation_ids": all_neg_relation_ids,
+                "all_relation_position": all_relation_postition,
+                "all_pattern_position": all_pattern_position
             }
             for k, v in ret.items():
                 ret[k] = np.array(v)
@@ -259,6 +291,8 @@ class DataSet:
             all_sentence_lengths = []
             all_pos_relation_ids = []
             all_neg_relation_ids = []
+            all_pattern_position = []
+            all_relation_postition = []
             while len(all_words) < batch_size:
                 if index == num:
                     random.shuffle(all_data)
@@ -283,6 +317,12 @@ class DataSet:
                     all_word_ids.append(self.pad_words(word_ids, self.word_padding))
                 all_sentence_lengths.append(len(str_words))
                 all_words.append(str_words)
+                if self.use_pat_position:
+                    all_pattern_position.append(self.get_pattern_position(self.pattern_dim, len(str_words)))
+
+                if self.use_rel_position:
+                    all_relation_postition.append(self.relation_position)
+
                 if self.char_based:
                     char_ids = [[self.char_to_id[c] for c in w if self.char_to_id]
                                 for w in str_words]
@@ -314,7 +354,9 @@ class DataSet:
                 "char_ids": all_char_ids,
                 "word_lengths": all_word_lengths,
                 "pos_relation_ids": all_pos_relation_ids,
-                "neg_relation_ids": all_neg_relation_ids
+                "neg_relation_ids": all_neg_relation_ids,
+                "all_relation_postition": all_relation_postition,
+                "all_pattern_position": all_pattern_position
             }
             for k, v in ret.items():
                 ret[k] = np.array(v)
