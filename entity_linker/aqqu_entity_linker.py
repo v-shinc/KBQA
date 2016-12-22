@@ -14,16 +14,17 @@ class AqquEntityLinker:
         question = ' '.join(naive_split(question))
         tokens = self.parser.parse(question)
         entities = self.entity_linker.identify_entities_in_tokens(tokens)
+        mid_to_item = dict()
 
-        candidates = list()
         for e in entities:
             mid = e.get_mid()
             if not mid.startswith('m.'):
                 mid = e.surface_name
-            c = dict()
-            c['topic'] = mid
-            c['mention'] = e.surface_name
-            c['entity_score'] = e.get_score()
-            candidates.append(c)
-        return question, candidates
+            if mid not in mid_to_item or mid_to_item[mid]['entity_score'] < e.surface_score:
+                mid_to_item[mid] = dict()
+                mid_to_item[mid]['topic'] = mid
+                mid_to_item[mid]['mention'] = e.surface_name
+                mid_to_item[mid]['entity_score'] = e.surface_score
+
+        return question, mid_to_item.values()
 

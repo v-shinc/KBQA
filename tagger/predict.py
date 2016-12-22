@@ -222,6 +222,7 @@ class EntityLinker(object):
         """
         # 需要优化： 找到所有实体及mention后， 再去统一计算mention likelihood
         res = self.entity_mention_tagger.tag(sentence)
+        sentence = res['sentence']
         candidates = dict()
         for surface, likelihood in res['mentions'].items():
             # print '-' * 20
@@ -241,7 +242,7 @@ class EntityLinker(object):
                     candidates[mid]['mention_score'] = likelihood
         # use ngram of
         if len(candidates) == 0:
-            # print '[get_candidate_topic_entities] use ngram of tagged mention',
+            # print '[get_candidate_topic_entities] use ngram of tagged mention'
             # all_pos = res['pos']
             for surface in res['mentions'].keys():
                 surface = surface.lower().split()
@@ -276,7 +277,7 @@ class EntityLinker(object):
         # print '[EntityLinker.get_candidate_topic_entities] conclude'
         # for mid, info in candidates.iteritems():
         #     print mid, info
-        return res['sentence'], candidates.values()
+        return sentence, candidates.values()
 
 
 

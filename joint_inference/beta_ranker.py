@@ -61,8 +61,8 @@ class BetaRanker:
                     pattern_encoder = encoder.ADDEncoder(params['pattern_config'], 'pattern_add')
                     relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
 
-                    patterns = [pattern_encoder.encode(self.pattern_word_ids[i], self.sentence_lengths[i], i == 1) for i in range(2)]
-                    relations = [relation_encoder.encode(self.relation_ids[i], None, i==1) for i in range(2)]
+                    patterns = [pattern_encoder.encode(self.pattern_word_ids[i], self.sentence_lengths[i]) for i in range(2)]
+                    relations = [relation_encoder.encode(self.relation_ids[i], None) for i in range(2)]
                     patterns = [patterns[i] / tf.sqrt(tf.reduce_sum(patterns[i] ** 2, 1, keep_dims=True)) for i in range(2)]
                     relations = [relations[i] / tf.sqrt(tf.reduce_sum(relations[i] ** 2, 1, keep_dims=True)) for i in range(2)]
             # elif params['relation_config']['encoder'] == 'CNN':
@@ -108,15 +108,21 @@ class BetaRanker:
             rel_drops = [tf.nn.dropout(relations[i], self.dropout_keep_prob) for i in range(2)]
 
             # Bilinear similarity
-            dim = patterns[0].get_shape()[1]
-            initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
-            with tf.variable_scope('bilinear_sim', regularizer=tf.contrib.layers.l2_regularizer(params['l2_scale'])):
-                bi_m = tf.get_variable('bi_m', [dim, dim], initializer=initializer)
-                self.bi_sims = [tf.reduce_sum(tf.mul(tf.matmul(pat_drops[i], bi_m), rel_drops[i]), 1, keep_dims=True) for i in range(2)]
+            # dim = patterns[0].get_shape()[1]
+            # initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+            # with tf.variable_scope('bilinear_sim', regularizer=tf.contrib.layers.l2_regularizer(params['l2_scale'])):
+            #     bi_m = tf.get_variable('bi_m', [dim, dim], initializer=initializer)
+            #     self.bi_sims = [tf.reduce_sum(tf.mul(tf.matmul(pat_drops[i], bi_m), rel_drops[i]), 1, keep_dims=True) for i in range(2)]
+            # for i in [0, 1]:
+            #     features[i].append(pat_drops[i])
+            #     features[i].append(rel_drops[i])
+            #     features[i].append(self.bi_sims[i])
+            #     features[i].append(self.extras[i])
+
             for i in [0, 1]:
-                features[i].append(pat_drops[i])
-                features[i].append(rel_drops[i])
-                features[i].append(self.bi_sims[i])
+                #features[i].append(pat_drops[i])
+                #features[i].append(rel_drops[i])
+                features[i].append(tf.expand_dims(self.cosine_sim(pat_drops[i], rel_drops[i]), dim=1))
                 features[i].append(self.extras[i])
 
             # Concat features

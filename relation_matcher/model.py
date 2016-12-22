@@ -1,5 +1,5 @@
 import tensorflow as tf
-from encoder import CNNEncoder, ADDEncoder, RNNEncoder
+from encoder import CNNEncoder, ADDEncoder, RNNEncoder, PositionADDEncoder
 import numpy as np
 class RelationMatcherModel:
     def __init__(self, params):
@@ -10,6 +10,8 @@ class RelationMatcherModel:
         self.q_char_ids = tf.placeholder(tf.int32, [None, params['max_sentence_len'], params['max_word_len']], name='q_char_ids')
         self.q_word_lengths = tf.placeholder(tf.int64, [None, params['max_sentence_len']])
         self.dropout_keep_prob = tf.placeholder(tf.float32, name='dropout_keep_prob')
+        self.pattern_positions = tf.placeholder(tf.float32, [None, params['max_sentence_len'], params['question_config']['word_dim']])
+        self.relation_positions = tf.placeholder(tf.float32, [None, 3, params['relation_config']['word_dim']])
 
         with tf.device('/gpu:%s' % params.get('gpu', 1)):
             if params['encode_name'] == 'CNN':
@@ -24,11 +26,22 @@ class RelationMatcherModel:
                 neg_relation = relation_encoder.encode(self.neg_relation_ids, True)
 
             elif params['encode_name'] == 'ADD':
-                question_encoder = ADDEncoder(params['question_config'], 'question_add')
-                relation_encoder = ADDEncoder(params['relation_config'], 'relation_add')
-                question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
-                pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
-                neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
+                if params['question_config'].get("use_position", False):
+                    question_encoder = PositionADDEncoder(params['question_config'], "question_add")
+                    question = question_encoder.encode(self.q_word_ids, self.pattern_positions)
+                else:
+                    question_encoder = ADDEncoder(params['question_config'], "question_add")
+                    question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
+
+                if params['relation_config'].get("use_position", False):
+                    relation_encoder = PositionADDEncoder(params['relation_config'], 'relation_add')
+                    pos_relation = relation_encoder.encode(self.pos_relation_ids, self.relation_positions)
+                    neg_relation = relation_encoder.encode(self.neg_relation_ids, self.relation_positions)
+                else:
+                    relation_encoder = ADDEncoder(params['relation_config'], 'relation_add')
+                    pos_relation = relation_encoder.encode(self.pos_relation_ids, None)
+                    neg_relation = relation_encoder.encode(self.neg_relation_ids, None)
+
             elif params['encode_name'] == 'RNN':
                 question_encoder = RNNEncoder(params['question_config'], 'question_rnn')
                 relation_encoder = RNNEncoder(params['relation_config'], 'relation_rnn')
@@ -84,7 +97,10 @@ class RelationMatcherModel:
             question_word_lengths,
             pos_relation_ids,
             neg_relation_ids,
-            dropout_keep_prob):
+            dropout_keep_prob,
+            pattern_positions=None,
+            relation_positions=None,
+            ):
         feed_dict = dict()
 
         if 'word_dim' in self.params['question_config']:
@@ -95,7 +111,10 @@ class RelationMatcherModel:
             feed_dict[self.q_char_ids] = question_char_ids
 
             feed_dict[self.q_word_lengths] = question_word_lengths
-
+        if self.params['question_config'].get("use_position", False):
+            feed_dict[self.pattern_positions] = pattern_positions
+        if self.params['relation_config'].get("use_position", False):
+            feed_dict[self.relation_positions] = relation_positions
         feed_dict[self.dropout_keep_prob] = dropout_keep_prob
         feed_dict[self.pos_relation_ids] = pos_relation_ids
         feed_dict[self.neg_relation_ids] = neg_relation_ids
@@ -110,6 +129,8 @@ class RelationMatcherModel:
                 question_char_ids,
                 question_char_lengths,
                 relation_ids,
+                pattern_positions=None,
+                relation_positions=None,
                 include_repr=False):
         feed_dict = dict()
         if 'word_dim' in self.params['question_config']:
@@ -119,10 +140,14 @@ class RelationMatcherModel:
         if 'char_dim' in self.params['question_config']:
             feed_dict[self.q_char_ids] = question_char_ids
             feed_dict[self.q_word_lengths] = question_char_lengths
-
+        if self.params['question_config'].get("use_position", False):
+            feed_dict[self.pattern_positions] = pattern_positions
+        if self.params['relation_config'].get("use_position", False):
+            feed_dict[self.relation_positions] = relation_positions
         feed_dict[self.dropout_keep_prob] = 1
         feed_dict[self.pos_relation_ids] = relation_ids
         feed_dict[self.neg_relation_ids] = relation_ids
+
         if include_repr:
             return self.session.run([self.neg_sim, self.question_drop, self.pos_relation_drop], feed_dict)
         else:

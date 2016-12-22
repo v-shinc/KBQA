@@ -69,7 +69,9 @@ if __name__ == '__main__':
                 data['word_lengths'],
                 data['pos_relation_ids'],
                 data['neg_relation_ids'],
-                config['dropout_keep_prob']
+                config['dropout_keep_prob'],
+                data['pattern_positions'],
+                data['relation_positions'],
             )
             total_loss += loss
 
@@ -79,15 +81,16 @@ if __name__ == '__main__':
 
         old_path = model.save("%s-%s" % (save_path, epoch_index))
         if config['fn_dev']:
-            p_at_1, average_rank, num_avg_candidates, eval_info = \
-                evaluate(dataset, model, config['fn_dev'], dev_res_path)
-            print >> fout_log, eval_info
-            if p_at_1 > best_p_at_1:
-                best_p_at_1 = p_at_1
-                os.rename(old_path, save_path)
-                os.rename('%s.meta' % old_path, '%s.meta' % save_path)
-                print "best mode", old_path
+            if epoch_index % 10 == 0:
+                p_at_1, average_rank, num_avg_candidates, eval_info = \
+                    evaluate(dataset, model, config['fn_dev'], dev_res_path)
+                print >> fout_log, eval_info
+                if p_at_1 > best_p_at_1:
+                    best_p_at_1 = p_at_1
+                    os.rename(old_path, save_path)
+                    os.rename('%s.meta' % old_path, '%s.meta' % save_path)
+                    print "best mode", old_path
 
-        if epoch_index % 3 == 0:
+        if epoch_index % 10 == 0:
             print "Evaluation over training data"
-            evaluate(dataset, model, '../data/wq.aqqu.relation.train', dev_res_path)
+            evaluate(dataset, model, '../data/wq.aqqu.relation.test', dev_res_path)

@@ -33,16 +33,19 @@ def evaluate(dataset, model, fn_dev, fn_res):
         )
 
         scores = scores.tolist()
-        rank = sorted(zip(scores, data['paths']), key=lambda x: x[0], reverse=True)
-        print >> res_file, data['question']
-        for i in xrange(len(scores)):
-            print >> res_file, rank[i][1], rank[i][0]
+        # rank = sorted(zip(scores, data['paths']), key=lambda x: x[0], reverse=True)
+        # print >> res_file, data['question']
+        # for i in xrange(len(scores)):
+        #     print >> res_file, rank[i][1], rank[i][0]
         best_index = -100000
         best_predicted_score = -1
         for i in xrange(len(scores)):
             if scores[i] > best_predicted_score:
                 best_index = i
                 best_predicted_score = scores[i]
+            elif scores[i] == best_predicted_score and data['f1'][i] > data['f1'][best_index]:
+                best_index = i
+
 
         average_f1 += data['f1'][best_index]
         count += 1
@@ -52,6 +55,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
             if data['f1'][i] > gold_score:
                 gold_score = data['f1'][i]
                 gold_index = i
+
         rank_index = 1
         for s in scores:
             if s > scores[gold_index]:
@@ -64,7 +68,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
             print >> res_file, data['question']
             for j in indices:
                 print >> res_file, scores[j], data['f1'][j], data['pattern_words'][j], data['mentions'][j], data['paths'][j], ' '.join(map(str, data['extras'][j]))
-            print >> res_file
+            print >> res_file, '<B>'
     average_f1 *= 1.0 / count
     average_candidate_count *= 1.0 / count
     average_rank = average_rank * 1.0 / count
@@ -89,6 +93,7 @@ if __name__ == '__main__':
 
     config_path = os.path.join(dir_path, 'config.json')
     parameters = json.load(open(config_path))
+    parameters['load_path'] = save_path
     dataset = DataSet(parameters)
     model = BetaRanker(
         parameters
