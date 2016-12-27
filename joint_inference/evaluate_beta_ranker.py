@@ -10,7 +10,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
     count = 0
     res_file = None
     average_f1 = 0.
-    average_rank = 0. # best query pattern rank
+    average_rank = 0.  # best query pattern rank
     if fn_res:
         res_file = open(fn_res, 'w')
     for data in dataset.test_iterator(fn_dev):
@@ -19,24 +19,25 @@ def evaluate(dataset, model, fn_dev, fn_res):
             sys.stdout.flush()
         lno += 1
 
-        scores = model.predict(
+        scores, pattern_relation_scores = model.predict(
             data['pattern_word_ids'],
             data['sentence_lengths'],
             None,  # TODO: support pattern char-based feature
             None,
             data['relation_ids'],
+            data['relation_lengths'],
             data['mention_char_ids'],
             data['topic_char_ids'],
             data['mention_lengths'],
             data['topic_lengths'],
+            data['question_word_ids'],
+            data['question_lengths'],
+            data['type_ids'],
+            data['type_lengths'],
             data['extras']
         )
 
         scores = scores.tolist()
-        # rank = sorted(zip(scores, data['paths']), key=lambda x: x[0], reverse=True)
-        # print >> res_file, data['question']
-        # for i in xrange(len(scores)):
-        #     print >> res_file, rank[i][1], rank[i][0]
         best_index = -100000
         best_predicted_score = -1
         for i in xrange(len(scores)):
@@ -46,8 +47,11 @@ def evaluate(dataset, model, fn_dev, fn_res):
             elif scores[i] == best_predicted_score and data['f1'][i] > data['f1'][best_index]:
                 best_index = i
 
-
-        average_f1 += data['f1'][best_index]
+        if best_index == -100000:
+            print data
+            print len(scores), scores
+        else:
+            average_f1 += data['f1'][best_index]
         count += 1
         gold_index = -100000
         gold_score = -1
@@ -67,7 +71,7 @@ def evaluate(dataset, model, fn_dev, fn_res):
             indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
             print >> res_file, data['question']
             for j in indices:
-                print >> res_file, scores[j], data['f1'][j], data['pattern_words'][j], data['mentions'][j], data['paths'][j], ' '.join(map(str, data['extras'][j]))
+                print >> res_file, scores[j], data['f1'][j], data['pattern_words'][j], data['paths'][j], pattern_relation_scores[j], ' '.join(map(str, data['extras'][j]))
             print >> res_file, '<B>'
     average_f1 *= 1.0 / count
     average_candidate_count *= 1.0 / count

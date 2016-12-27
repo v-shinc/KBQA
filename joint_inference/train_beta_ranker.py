@@ -39,6 +39,9 @@ if __name__ == '__main__':
     config["pattern_config"]['num_char'] = dataset.num_char
     config['relation_config']['num_word'] = dataset.num_relation
     config['relation_config']['num_char'] = dataset.num_char
+    if 'type_config' in config:
+        config['type_config']['num_word'] = dataset.num_type
+        config['question_config']['num_word'] = dataset.num_word
     if 'topic_config' in config:
         config['topic_config']['num_word'] = dataset.num_char  # this is char-based
     model = BetaRanker(config)
@@ -72,10 +75,15 @@ if __name__ == '__main__':
                 None,  # data['pattern_char_ids'],
                 None,  # data['word_lengths'],
                 data['relation_ids'],
+                data['relation_lengths'],
                 data['mention_char_ids'],
                 data['topic_char_ids'],
                 data['mention_lengths'],
                 data['topic_lengths'],
+                data['question_word_ids'],
+                data['question_lengths'],
+                data['type_ids'],
+                data['type_lengths'],
                 data['extras'],
                 config['dropout_keep_prob']
             )

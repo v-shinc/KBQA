@@ -15,6 +15,16 @@ class DBManager(object):
     mediator_nodes = None
 
     @staticmethod
+    def get_notable_type(mid):
+        if not DBManager.notable_type_db:
+            DBManager.notable_type_db = leveldb.LevelDB(globals.config.get('LevelDB', 'notable_type_db'))
+        try:
+            notable_type = DBManager.notable_type_db.Get(mid)
+            return notable_type.split('\t')
+        except KeyError:
+            return []
+
+    @staticmethod
     def get_name(mid):
         if not DBManager.name_db:
             DBManager.name_db = leveldb.LevelDB(globals.config.get('LevelDB', 'name_db'))

@@ -54,6 +54,7 @@ class EntityMentionTagger(object):
         self.nlp_parser = NLPParser()
         self.fix = lambda x: x.replace('-LSB-', '[').replace('-RSB-', ']').replace('-LCB-', '{').replace('-RCB-', '}').replace('-LRB-', '(').replace('-RRB-', ')')
 
+
     def get_pos_tag(self, sentence):
         sentence = naive_split(sentence)
         tokens, poss = self.nlp_parser.tag_pos(' '.join(sentence))
@@ -179,6 +180,7 @@ class EntityLinker(object):
                                       r'POS)+$')
 
         self.ignore = {'are', 'is', 'were', 'was', 'be', 'of', 'the', 'and', 'or', 'a', 'an'}
+        self.punctuations = set('!"#$%&\'()*+,-./;<=>?@[\\]^_`{|}~')  # remove ':'
 
     def is_entity_occurrence(self, all_pos, all_token, start, end):
         # Concatenate POS-tags
@@ -261,7 +263,7 @@ class EntityLinker(object):
                     for i in range(l - j + 1):
                         # if self.is_entity_occurrence(all_pos, sentence, start + i, start + i + j):
                         s = ''.join(surface[i:i + j])
-
+                        s = ''.join([c for c in s if c not in self.punctuations])
                         entity_res = DBManager.get_candidate_entities(s, 0.1)
                         print surface[i:i + j], entity_res
                         for mid, entity_score in entity_res:
