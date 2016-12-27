@@ -1,3 +1,4 @@
+#coding=utf8
 import sys
 import json
 from pipeline import Pipeline
@@ -147,6 +148,33 @@ def gen_data_for_relation_matcher(fn_webquestion_list, fn_simplequstion_list, fn
                     "neg_relation": list(negative_relations)},
                     ensure_ascii=False).encode('utf8')
 
+def gen_data_for_relation_matcher_from_WebQSP(fn_webqsp_list, fn_out, use_aqqu):
+    pipe = Pipeline(use_aqqu)
+    #从问题里提取question->candidate relation的映射
+    wq = []
+    for fn in fn_webqsp_list:
+        wq.extend(json.load(open(fn))['Questions'])
+    with open(fn_out, 'w') as fout:
+        for data in wq:
+
+            question, candidates = pipe.gen_candidate_relations(data['RawQuestion'])
+            pattern_to_correct = dict()
+            for parse in data['Parses']:
+                if not parse['PotentialTopicEntityMention']:
+                    continue
+                mention = ' '.join(naive_split(parse['PotentialTopicEntityMention']))
+                pattern = question.replace(mention, '<$>')
+                if '<$>' not in pattern:
+                    print question
+                if parse['InferentialChain']:
+                    if pattern not in pattern_to_correct:
+                        pattern_to_correct[pattern] = set()
+                    pattern_to_correct[pattern].add(parse['InferentialChain'][-1])
+            for pattern, correct in pattern_to_correct.items():
+                wrong = candidates - correct
+                print >> fout, json.dumps({'question': pattern, "pos_relation": list(correct), "neg_relation": list(wrong)})
+
+
 
 # def gen_query_graph(fn_wq_list, fn_simple_list, fn_out):
 #     pipeline = Pipeline()
@@ -198,13 +226,18 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out, use_aqqu=False):
                 for path in data['paths']:
                     if path[1] == "forward_pass_cvt" or path[1] == "forward_direct":
                         positive_relations.add(path[0].split()[-2])
-                if len(positive_relations) == 0:
-                    continue
+                # if len(positive_relations) == 0:
+                #     continue
                 qids.add(qid)
-                question, query_graphs = pipeline.gen_candidate_query_graph(data['utterance'])
+                question, query_graphs = pipeline.gen_candidate_query_graph(data['utterance'], debug=False)
+                # print "candidate query graph"
+                # for q in query_graphs:
+                #     print q
                 for j in xrange(len(query_graphs)):
                     query_graphs[j]['qid'] = qid
                 gold_answers = set(data['mids'].values())
+                # print question
+                # print "correct answer", gold_answers
                 query_patterns = pipeline.extract_query_pattern_and_f1(query_graphs, gold_answers)
 
                 # Just for statistic
@@ -299,25 +332,61 @@ if __name__ == '__main__':
     #     "../data/my_fb/simple.relation.test"
     # )
 
-    # Generate overall features for answer selection
-    # gen_query_graph(
-    #     ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
-    #     ['../data/simple.train.dev.el.v2'],
-    #     '../data/ranker/wq.train.ranker'
+    # Generate relation pattern pairs
+    # gen_data_for_relation_matcher_from_WebQSP(
+    #     ['../../data/WebQSP/WebQSP.train.partial.json', "../../data/WebQSP/WebQSP.train.json"],
+    #     '../data/WebQSP/WebQSP.crf.relation.train',
+    #     use_aqqu=False
     # )
-    # gen_query_graph(
-    #     ['../data/wq.test.complete.v2'],
-    #     [],
-    #     '../data/ranker/wq.test.ranker'
+    # gen_data_for_relation_matcher_from_WebQSP(
+    #     ['../../data/WebQSP/WebQSP.test.partial.json', "../../data/WebQSP/WebQSP.test.json"],
+    #     '../data/WebQSP/WebQSP.crf.relation.test',
+    #     use_aqqu=False
+    # )
+    #
+    # gen_data_for_relation_matcher_from_WebQSP(
+    #     ['../../data/WebQSP/WebQSP.train.partial.json', "../../data/WebQSP/WebQSP.train.json"],
+    #     '../data/WebQSP/WebQSP.aqqu.relation.train',
+    #     use_aqqu=True
+    # )
+    # gen_data_for_relation_matcher_from_WebQSP(
+    #     ['../../data/WebQSP/WebQSP.test.partial.json', "../../data/WebQSP/WebQSP.test.json"],
+    #     '../data/WebQSP/WebQSP.aqqu.relation.test',
+    #     use_aqqu=True
     # )
 
-    # Generate ovarall features using AQQU entity linker
+    # Generate overall features for answer selection
+    gen_query_graph(
+        ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
+        [],
+        # ['../data/simple.train.dev.el.v2'],
+        '../data/ranker/wq.train.ranker.prs'
+    )
     gen_query_graph(
         ['../data/wq.test.complete.v2'],
         [],
-        '../data/ranker/wq.aqqu.test.ranker',
-        True
+        '../data/ranker/wq.test.ranker.prs'
     )
+
+    # gen_query_graph(
+    #     ['debug.test'],
+    #     [],
+    #     'tmp'
+    # )
+    # Generate ovarall features using AQQU entity linker
+    # gen_query_graph(
+    #     ['../data/wq.train.complete.v2', '../data/wq.dev.complete.v2'],
+    #     [],
+    #     '../data/ranker/wq.aqqu.train.ranker.prs',
+    #     True
+    # )
+    #
+    # gen_query_graph(
+    #     ['../data/wq.test.complete.v2'],
+    #     [],
+    #     '../data/ranker/wq.aqqu.test.ranker.prs',
+    #     True
+    # )
 
     # gen_svm_ranker_data('../data/wq.answer.selection.train.top3', '../data/wq.train.top3.svm')
     # debug(sys.argv[1])

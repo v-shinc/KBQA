@@ -12,6 +12,7 @@ from tagger.predict import EntityLinker, EntityMentionTagger
 from entity_linker.aqqu_entity_linker import AqquEntityLinker
 from relation_matcher.predict import RelationMatcher
 from kb_manager.db_manager import DBManager
+from nltk.stem.porter import PorterStemmer
 # from kb_manager.mm_freebase import MemoryFreebaseHelper
 # from kb_manager.freebase_client import FreebaseClient
 globals.read_configuration('../config.cfg')
@@ -34,7 +35,14 @@ class Pipeline(object):
         self.db_manger = DBManager()
         self.lemma = dict()
         self.lemmatiser = WordNetLemmatizer()
+        self.stemmer = PorterStemmer()
         self.stopwords = set(stopwords.words('english'))
+        self.qwords = {'what', "where", "when", "who", "which", "how"}
+        self.qwords_rel_cooccur = dict()
+        with open(globals.config.get("FREEBASE", "question-word-relation-cooccur")) as fin:
+            for line in fin:
+                qw_rel, cooccur = line.strip().split('\t')
+                self.qwords_rel_cooccur[qw_rel] = float(cooccur)
 
     def _get_lemma(self, word):
         if word not in self.lemma:
@@ -59,11 +67,19 @@ class Pipeline(object):
                 continue
                 # raise ValueError("Topic name is None")
             queries[i]['topic_name'] = name
+            queries[i]['topic_type'] = self.db_manger.get_notable_type(queries[i]['topic'])
             ret_queries.append(queries[i])
         print '[Pipeline.add_topic_feature]', question
         return question, ret_queries
 
-    def add_path_feature(self, question, queries, topk=-1, include_relation_score=True):
+    def _get_qword_relation_cooccur(self, question, relation):
+        rel = ".".join(relation.split('.')[-3:-1])
+        for w in question.split():
+            if w in self.qwords:
+                return self.qwords_rel_cooccur.get(w+" "+rel, 0.)
+        return 0.
+
+    def add_path_feature(self, question, queries, topk=-1, include_relation_score=True, debug=False):
         """
         :param question:
         :return:
@@ -78,21 +94,36 @@ class Pipeline(object):
         for f in queries:
             mid = f['topic']
             paths = self.db_manger.get_subgraph(mid)
+            if debug:
+                "DEBUG"
+                print "topic", mid
             for path in paths:
                 relation = path[-1][1]
                 answer = path[-1][2]
+                if debug:
+                    print relation, answer
                 if not self.get_name(answer):
+                    print "{} has no name, {}!!!".format(answer, relation)
                     continue
                 feat = copy.deepcopy(f)
                 feat['path'] = path
                 feat['pattern'] = question.replace(f['mention'], '<$>')
                 feat['relation'] = relation
-                relation_lemmas = [self.lemmatiser.lemmatize(w) for w in relation.split('.')[-1].split('_')]
-                pattern_lemmas = [self.lemmatiser.lemmatize(w) for w in feat['pattern'].split()]
-                feat['pattern_lemma'] = ' '.join(pattern_lemmas)
-                feat['rel_pat_overlap'] = 1. if (set(relation_lemmas) - self.stopwords).intersection(set(pattern_lemmas)) else 0.
+                # relation_lemmas = [self.lemmatiser.lemmatize(w) for w in relation.split('.')[-1].split('_')]
+                # pattern_lemmas = [self.lemmatiser.lemmatize(w) for w in feat['pattern'].split()]
+                # feat['pattern_lemma'] = ' '.join(pattern_lemmas)
+                # feat['relation_lemma'] = ' '.join(relation_lemmas)
+                # feat['rel_pat_overlap'] = 1. if (set(relation_lemmas) - self.stopwords).intersection(
+                #     set(pattern_lemmas)) else 0.
+                relation_stem = [self.stemmer.stem(w) for w in relation.split('.')[-1].split('_')]
+                pattern_stem = [self.stemmer.stem(w) for w in feat['pattern'].split()]
+                feat['relation_stem'] = ' '.join(relation_stem)
+                feat['pattern_stem'] = ' '.join(pattern_stem)
+                feat['rel_pat_overlap'] = 1. if (set(relation_stem) - self.stopwords).intersection(
+                    set(pattern_stem)) else 0.
                 pattern_relation_set.add((feat['pattern'], feat['relation']))
                 feat['answer'] = answer
+                feat["qw_rel_occur"] = self._get_qword_relation_cooccur(question, relation)
                 new_queries.append(feat)
 
         if len(new_queries) == 0:
@@ -145,11 +176,13 @@ class Pipeline(object):
             return entry[1:-8]
         elif entry.endswith('^^date'):
             return entry[1:5]
+        elif entry.isdigit() and len(entry) == 4:  # isYear
+            return entry
         else:
             print entry, "has no name"
             return None
 
-    def hash_query(self, path, constraints):
+    def hash_query(self, path, constraints, mention):
         """path contains mediator, constraints is list of triple"""
         sequence = []
 
@@ -158,6 +191,7 @@ class Pipeline(object):
             sequence.append(path[0][0])  # subject
             sequence.append(path[0][1])  # first relation
             sequence.append(path[1][1])  # second relation
+            sequence.append(mention)
             consts = set()
             # ignore mediator
             for c in constraints:
@@ -168,12 +202,12 @@ class Pipeline(object):
             # ignore answer
             sequence.append(path[0][0])  # subject
             sequence.append(path[0][1])  # first relation
+            sequence.append(mention)
 
         return hash(" ".join(sequence))
 
-
-    def add_constraints(self, question, queries):
-        qwords = set(question.split())
+    def add_constraints(self, question, queries, debug=False):
+        word_in_question = set(question.split())
         candidates_topics = set()
         for i in xrange(len(queries)):
             candidates_topics.add(queries[i]['topic'])
@@ -186,10 +220,8 @@ class Pipeline(object):
                 queries[i]['constraint_entity_in_q'] = 0
                 queries[i]['constraint_entity_word'] = 0
                 queries[i]['constraints'] = []
-                # queries[i]['constraint_entity_word_detail'] = ""
+
                 num_name_cross = 0
-                # if len(cons_paths) > 10:
-                #     continue
 
                 for _, rel, obj in cons_paths:
                     if obj == queries[i]['answer'] or obj == queries[i]['topic']:
@@ -201,7 +233,7 @@ class Pipeline(object):
                     # Some words of the constraint entity's name appear in the question
                     # percentage of the words in the name of the constraint entity appear in the question
 
-                    # TODO：aqqu return date and year without ^^date and ^^gYear
+                    # TODO:
                     name = self.get_name(obj)
 
                     if not name:
@@ -209,7 +241,7 @@ class Pipeline(object):
                     else:
 
                         cons_words = set(name.lower().split())
-                        intersect_per = len(cons_words.intersection(qwords)) * 1.0 / len(cons_words)
+                        intersect_per = len(cons_words.intersection(word_in_question)) * 1.0 / len(cons_words)
                         queries[i]['constraint_entity_word'] += intersect_per
 
                         if intersect_per > 0:
@@ -235,26 +267,40 @@ class Pipeline(object):
         queries = self.add_path_feature(question, queries)
         return question, queries
 
-    def gen_candidate_relations(self, question):
+    def gen_candidate_relations(self, question, debug=False):
         question, candidates = self.entity_linker.get_candidate_topic_entities(question)
         candidate_relations = set()
-
+        if debug:
+            print question
+            for c in candidates:
+                print c
         for f in candidates:
             mid = f['topic']
-            candidate_relations.update([r[-1] for r in self.db_manger.get_multiple_hop_relations(mid)])
+            rels = [r[-1] for r in self.db_manger.get_multiple_hop_relations(mid)]
+            if debug:
+                print mid
+                for r in rels:
+                    print r
+            candidate_relations.update(rels)
         return question, candidate_relations
 
-    def gen_candidate_query_graph(self, question):
+    def gen_candidate_query_graph(self, question, debug=False):
         question, queries = self.add_topic_feature(question)
-        queries = self.add_path_feature(question, queries, topk=-1)
-        queries = self.add_constraints(question, queries)
+        if debug:
+            print queries
+            for q in queries:
+                print q
+        queries = self.add_path_feature(question, queries, topk=-1, include_relation_score=True, debug=debug)
+        queries = self.add_constraints(question, queries, debug)
 
         for i in xrange(len(queries)):
-            queries[i]['hash'] = self.hash_query(queries[i]['path'], queries[i].get('constraints', []))
-
+            queries[i]['hash'] = self.hash_query(queries[i]['path'], queries[i].get('constraints', []), queries[i]['mention'])
+        if debug:
+            for q in queries:
+                print q
         return question, queries
 
-    def extract_query_pattern_and_f1(self, queries, gold_answers):
+    def extract_query_pattern_and_f1(self, queries, gold_answers, debug=False):
         if not isinstance(gold_answers, set):
             gold_answers = set(gold_answers)
         query_hash_to_answers = dict()
@@ -300,7 +346,20 @@ def compute_f1(gold_set, predict_set):
     return precision, recall, f1
 
 if __name__ == '__main__':
-    pass
+    import sys
+    pipeline = Pipeline(False)
+    # question, queries = pipeline.add_topic_feature(sys.argv[1])
+    # print queries
+    # queries = pipeline.add_path_feature(question, queries, include_relation_score=False, debug=False)
+    # pipeline.gen_candidate_relations(sys.argv[1], True)
+    # queries = pipeline.add_constraints(question, queries)
+    # for q in queries:
+    #     print q
+    question, queries = pipeline.gen_candidate_query_graph(sys.argv[1], debug=True)
+    query_pattern = pipeline.extract_query_pattern_and_f1(queries, {'m.0f2zfl'})
+
+    for q in query_pattern:
+        print q
 
 
 

@@ -1,8 +1,7 @@
 import sys
 import os
 import json
-from data_helper import DataSet
-from model import RelationMatcherModel
+
 
 
 def evaluate(dataset, model, fn_dev, fn_res, k=3):
@@ -25,9 +24,11 @@ def evaluate(dataset, model, fn_dev, fn_res, k=3):
             data['char_ids'],
             data['word_lengths'],
             data['relation_ids'],
+            data['pattern_positions'],
+            data['relation_positions']
         )
         count += 1
-        pos_score = 0
+        pos_score = -1
         num_pos = data['num_pos']
         for i in xrange(data['num_pos']):
             if scores[i] > pos_score:
@@ -37,8 +38,8 @@ def evaluate(dataset, model, fn_dev, fn_res, k=3):
         for i in xrange(data['num_pos'], len(scores)):
             if scores[i] > pos_score:
                 rank_index += 1
-        for j in range(1, k+1):
-            if rank_index <= j:
+        for j in range(k):
+            if rank_index <= j + 1:   # j start from 0
                 num_p_at_k[j] += 1
 
         average_rank_index += rank_index
@@ -55,12 +56,12 @@ def evaluate(dataset, model, fn_dev, fn_res, k=3):
                 pos_relation_score.append([data['relations'][i], rank_index])
             # rank_list_str = ''.join(["%s: %s" % (r, s) for r, s in rank_list])
             print >> res_file, '{0}\t{1}\t{2}'.format(data['words'], pos_relation_score, rank_list).encode('utf8')
-    p_at_k = [num_p_at_k[j] * 1.0 / count for j in range(1, k+1)]
+    p_at_k = [num_p_at_k[j] * 1.0 / count for j in range(k)]
     average_candidate_count *= 1.0 / count
     average_rank = average_rank_index * 1.0 / count
     res_info = ""
-    for j in range(1, k+1):
-        res_info += "p@{}: {}\n".format(j, p_at_k[j])
+    for j in range(k):
+        res_info += "p@{}: {}\n".format(j+1, p_at_k[j])
     res_info += "Number of test case: {} \nAverage rank: {}\nAverage number of candidates: {}"\
         .format(count, average_rank, average_candidate_count)
     if res_file:
@@ -69,6 +70,9 @@ def evaluate(dataset, model, fn_dev, fn_res, k=3):
     return p_at_k[0], average_rank, average_candidate_count, res_info
 
 if __name__ == '__main__':
+    from data_helper import DataSet
+
+    from model import RelationMatcherModel
     dir_path = sys.argv[1]  # model dir path
     fn_dev = sys.argv[2]    # test file path
     if len(sys.argv) == 3:
@@ -81,6 +85,8 @@ if __name__ == '__main__':
 
     config_path = os.path.join(dir_path, 'config.json')
     parameters = json.load(open(config_path))
+    parameters['load_path'] = save_path
+
     dataset = DataSet(parameters)
     model = RelationMatcherModel(
         parameters

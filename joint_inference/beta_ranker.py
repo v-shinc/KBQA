@@ -33,17 +33,18 @@ class BetaRanker:
 
     def __init__(self, params):
         assert params['hidden_layer_sizes'][-1] == 1
-        max_sentence_len = params['max_sentence_len']
+        max_pattern_len = params['max_pattern_len']
         max_word_len = params['max_word_len']
         max_name_len = params['max_name_len']
         self.pattern_word_ids = [
-            tf.placeholder(tf.int32, [None, max_sentence_len])
+            tf.placeholder(tf.int32, [None, max_pattern_len])
             for i in range(2)]
         self.sentence_lengths = [tf.placeholder(tf.int32, [None]) for i in range(2)]
 
-        self.pattern_char_ids = [tf.placeholder(tf.int32, [None, max_sentence_len, max_word_len]) for i in range(2)]
-        self.word_lengths = [tf.placeholder(tf.int32, [None, max_sentence_len]) for i in range(2)]
-        self.relation_ids = [tf.placeholder(tf.int32, [None, 3]) for i in range(2)]
+        self.pattern_char_ids = [tf.placeholder(tf.int32, [None, max_pattern_len, max_word_len]) for i in range(2)]
+        self.word_lengths = [tf.placeholder(tf.int32, [None, max_pattern_len]) for i in range(2)]
+        self.relation_ids = [tf.placeholder(tf.int32, [None, 2]) for i in range(2)]
+        self.relation_lengths = [tf.placeholder(tf.int32, [None]) for i in range(2)]
         self.mention_char_ids = [tf.placeholder(tf.int32, [None, max_name_len])
                                  for i in range(2)]
         self.topic_char_ids = [tf.placeholder(tf.int32, [None, max_name_len])
@@ -62,9 +63,9 @@ class BetaRanker:
                     relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
 
                     patterns = [pattern_encoder.encode(self.pattern_word_ids[i], self.sentence_lengths[i]) for i in range(2)]
-                    relations = [relation_encoder.encode(self.relation_ids[i], None) for i in range(2)]
-                    patterns = [patterns[i] / tf.sqrt(tf.reduce_sum(patterns[i] ** 2, 1, keep_dims=True)) for i in range(2)]
-                    relations = [relations[i] / tf.sqrt(tf.reduce_sum(relations[i] ** 2, 1, keep_dims=True)) for i in range(2)]
+                    relations = [relation_encoder.encode(self.relation_ids[i], self.relation_lengths[i]) for i in range(2)]
+                    # patterns = [patterns[i] / tf.sqrt(tf.reduce_sum(patterns[i] ** 2, 1, keep_dims=True)) for i in range(2)]
+                    # relations = [relations[i] / tf.sqrt(tf.reduce_sum(relations[i] ** 2, 1, keep_dims=True)) for i in range(2)]
             # elif params['relation_config']['encoder'] == 'CNN':
             #     pattern_encoder = encoder.CNNEncoder(params['pattern_config'], 'pattern_cnn')
             #     # relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
@@ -82,6 +83,31 @@ class BetaRanker:
             else:
                 raise ValueError('relation_encoder should be one of [CNN, ADD, RNN]')
 
+            # question VS. type
+            if 'type_config' in params:
+                max_type_len = params['max_type_len']
+                max_question_len = params['max_question_len']
+                self.question_word_ids = [tf.placeholder(tf.int32, [None, max_question_len]) for i in range(2)]
+                self.question_lengths = [tf.placeholder(tf.int32, [None]) for i in range(2)]
+                self.type_ids = [tf.placeholder(tf.int32, [None, max_type_len]) for i in range(2)]
+                self.type_lengths = [tf.placeholder(tf.int32, [None]) for i in range(2)]
+                if params['question_config']['encoder'] == 'ADD':
+                    question_encoder = encoder.ADDEncoder(params['question_config'], 'question_add')
+                    questions = [question_encoder.encode(self.question_word_ids[i], self.question_lengths[i]) for i in range(2)]
+                elif params['question_config']['encoder'] == 'CNN':
+                    pass
+                elif params['question_config']['encoder'] == 'RNN':
+                    pass
+                else:
+                    raise ValueError('question_config should be one of [CNN, ADD, RNN]')
+
+                type_encoder = encoder.ADDEncoder(params['type_config'], 'type_add')
+                types = [type_encoder.encode(self.type_ids[i], self.type_lengths[i]) for i in range(2)]
+                question_drops = [tf.nn.dropout(questions[i], self.dropout_keep_prob) for i in range(2)]
+                types_drops = [tf.nn.dropout(types[i], self.dropout_keep_prob) for i in range(2)]
+                question_type_scores = [tf.expand_dims(self.cosine_sim(question_drops[i], types_drops[i]), dim=1) for i in range(2)]
+                for i in [0, 1]:
+                    features[i].append(question_type_scores[i])
 
             # Use char-based CNN or RNN to encode mention and topic name
             if 'topic_config' in params:
@@ -119,10 +145,12 @@ class BetaRanker:
             #     features[i].append(self.bi_sims[i])
             #     features[i].append(self.extras[i])
 
+            self.pattern_relation_scores = [[], []]
             for i in [0, 1]:
                 #features[i].append(pat_drops[i])
                 #features[i].append(rel_drops[i])
-                features[i].append(tf.expand_dims(self.cosine_sim(pat_drops[i], rel_drops[i]), dim=1))
+                self.pattern_relation_scores[i] = self.cosine_sim(pat_drops[i], rel_drops[i])
+                features[i].append(tf.expand_dims(self.pattern_relation_scores[i], dim=1))
                 features[i].append(self.extras[i])
 
             # Concat features
@@ -182,10 +210,15 @@ class BetaRanker:
             pattern_char_ids,
             word_lengths,
             relation_ids,
+            relation_lengths,
             mention_char_ids,
             topic_char_ids,
             mention_lengths,
             topic_lengths,
+            question_word_ids,
+            question_lengths,
+            type_ids,
+            type_lengths,
             extras,
             dropout_keep_prob):
         feed_dict = dict()
@@ -202,11 +235,17 @@ class BetaRanker:
 
         for i in [0, 1]:
             feed_dict[self.relation_ids[i]] = relation_ids[i]
+            feed_dict[self.relation_lengths[i]] = relation_lengths[i]
             if "topic_config" in self.params:
                 feed_dict[self.mention_char_ids[i]] = mention_char_ids[i]
                 feed_dict[self.topic_char_ids[i]] = topic_char_ids[i]
                 feed_dict[self.mention_lengths[i]] = mention_lengths[i]
                 feed_dict[self.topic_lengths[i]] = topic_lengths[i]
+            if 'type_config' in self.params:
+                feed_dict[self.question_word_ids[i]] = question_word_ids[i]
+                feed_dict[self.question_lengths[i]] = question_lengths[i]
+                feed_dict[self.type_ids[i]] = type_ids[i]
+                feed_dict[self.type_lengths[i]] = type_lengths[i]
             feed_dict[self.extras[i]] = extras[i]
 
         feed_dict[self.dropout_keep_prob] = dropout_keep_prob
@@ -220,10 +259,15 @@ class BetaRanker:
                 pattern_char_id,
                 word_length,
                 relation_id,
+                relation_lengths,
                 mention_char_id,
                 topic_char_id,
                 mention_lengths,
                 topic_lengths,
+                question_word_ids,
+                question_lengths,
+                type_ids,
+                type_lengths,
                 extras):
         feed_dict = dict()
         if 'word_dim' in self.params['pattern_config']:
@@ -236,13 +280,19 @@ class BetaRanker:
             feed_dict[self.word_lengths[0]] = word_length
         feed_dict[self.dropout_keep_prob] = 1
         feed_dict[self.relation_ids[0]] = relation_id
+        feed_dict[self.relation_lengths[0]] = relation_lengths
         if "topic_config" in self.params:
             feed_dict[self.mention_char_ids[0]] = mention_char_id
             feed_dict[self.topic_char_ids[0]] = topic_char_id
             feed_dict[self.mention_lengths[0]] = mention_lengths
             feed_dict[self.topic_lengths[0]] = topic_lengths
+        if 'type_config' in self.params:
+            feed_dict[self.question_word_ids[0]] = question_word_ids
+            feed_dict[self.question_lengths[0]] = question_lengths
+            feed_dict[self.type_ids[0]] = type_ids
+            feed_dict[self.type_lengths[0]] = type_lengths
         feed_dict[self.extras[0]] = extras
-        return self.session.run(self.scores[0], feed_dict)
+        return self.session.run([self.scores[0], self.pattern_relation_scores[0]], feed_dict)
     #
     # def get_question_repr(self,
     #                       question_word_ids,

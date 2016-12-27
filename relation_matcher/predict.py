@@ -26,6 +26,8 @@ class RelationMatcher:
             data['char_ids'],
             data['word_lengths'],
             data['relation_ids'],
+            data['pattern_positions'],
+            data['relation_positions']
         )
         return scores[0]
 
@@ -38,6 +40,8 @@ class RelationMatcher:
             data['char_ids'],
             data['word_lengths'],
             data['relation_ids'],
+            data['pattern_positions'],
+            data['relation_positions'],
             include_repr=True
         )
         return scores, pattern_repr, relation_repr

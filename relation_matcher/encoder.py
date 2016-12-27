@@ -42,7 +42,7 @@ class RNNEncoder:
         else:
             return forward_outputs, forward_state
 
-    def encode(self, word_input_ids, sentence_lengths, char_input_ids, word_lengths, reuse):
+    def encode(self, word_input_ids, sentence_lengths, char_input_ids, word_lengths, reuse, max_pool=True):
         inputs = []
         input_dim = 0
         with tf.variable_scope(self.scope, reuse=reuse):
@@ -67,12 +67,15 @@ class RNNEncoder:
                 input_dim += self.word_rnn_dim
             inputs = tf.concat(2, inputs)
             with tf.variable_scope('overall_rnn', reuse=reuse):
-                word_outputs, _ = self.rnn_layer(inputs, self.word_rnn_dim, sentence_lengths, self.word_bidirect)
-                final_outputs = tf.reduce_max(word_outputs, reduction_indices=1)
+                word_outputs, word_state = self.rnn_layer(inputs, self.word_rnn_dim, sentence_lengths, self.word_bidirect)
+                if max_pool:
+                    final_outputs = tf.reduce_max(word_outputs, reduction_indices=1)
+                else:
+                    final_outputs = word_state
 
             return final_outputs  # or return word_state
 
-class CNNEncoder:
+class HierarchicalCNNEncoder:
     def __init__(self, params, scope):
         self.scope = scope
         self.word_filter_sizes = params.get('word_filter_sizes', None)
@@ -103,7 +106,8 @@ class CNNEncoder:
                     filter_shape = [filter_size, embedding_size, 1, num_filters]
                     w = tf.get_variable(name="w", shape=filter_shape, initializer=tf.truncated_normal_initializer(stddev=0.1))
                     # w = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="w")
-                    b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name='b')
+                    # b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name='b')
+                    b = tf.get_variable(name='b', shape=[num_filters], initializer=tf.constant_initializer(0))
                     conv = tf.nn.conv2d(
                         inputs_expanded,
                         w,
@@ -111,6 +115,7 @@ class CNNEncoder:
                         padding="VALID",
                         name="conv"
                     )
+                    h = tf.nn.tanh(tf.nn.bias_add(conv, b), name='tanh')
                     pooled = tf.nn.max_pool(
                         h,
                         ksize=[1, sequence_len - filter_size + 1, 1, 1],
@@ -150,7 +155,67 @@ class CNNEncoder:
         return outputs
 
 
-class AdditionEncoder:
+class CNNEncoder:
+    def __init__(self, params, scope):
+        self.scope = scope
+        self.word_filter_sizes = params.get('word_filter_sizes')
+        self.word_num_filters = params.get('word_num_filters')
+        self._output_dim = len(self.word_filter_sizes) * self.word_num_filters
+        initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+        with tf.variable_scope(scope):
+            self.embeddings = tf.get_variable('word_embedding', [params['num_word'], params['word_dim']], initializer=initializer)
+
+    @staticmethod
+    def cnn_layer(inputs, filter_sizes, num_filters, scope):
+        sequence_len = inputs.get_shape()[1]
+        print inputs.get_shape()[1]
+        embedding_size = inputs.get_shape()[2]
+        print embedding_size
+        inputs_expanded = tf.expand_dims(inputs, -1)
+        print inputs_expanded.get_shape()
+        pooled_outputs = []
+        with tf.variable_scope(scope):
+            for i, filter_size in enumerate(filter_sizes):
+                with tf.variable_scope("conv_maxpool_%s" % filter_size):
+                    filter_shape = [filter_size, embedding_size, 1, num_filters]
+                    w = tf.get_variable(name="w", shape=filter_shape, initializer=tf.truncated_normal_initializer(stddev=0.01))
+                    b = tf.get_variable(name='b', shape=[num_filters], initializer=tf.constant_initializer(0))
+                    conv = tf.nn.conv2d(
+                        inputs_expanded,
+                        w,
+                        strides=[1, 1, 1, 1],
+                        padding="VALID",
+                        name="conv"
+                    )
+                    h = tf.nn.tanh(tf.nn.bias_add(conv, b), name='tanh')
+                    pooled = tf.nn.max_pool(
+                        h,
+                        ksize=[1, sequence_len - filter_size + 1, 1, 1],
+                        strides=[1, 1, 1, 1],
+                        padding='VALID',
+                        name='pool'
+                    )
+                    pooled_outputs.append(pooled)
+
+            # Combine all the pooled features
+            num_filters_total = num_filters * len(filter_sizes)
+            h_pool = tf.concat(3, pooled_outputs)
+            h_pool_flat = tf.reshape(h_pool, [-1, num_filters_total])
+            print h_pool_flat.get_shape()
+        return h_pool_flat
+
+    @property
+    def output_dim(self):
+        return self._output_dim
+
+    def encode(self, input_ids, reuse=False):
+        inputs = tf.nn.embedding_lookup(self.embeddings, input_ids)
+        with tf.variable_scope(self.scope, reuse=reuse):
+            outputs = self.cnn_layer(inputs, self.word_filter_sizes, self.word_num_filters, "word_cnn_layer")  # [batch_size, output_dim]
+            print outputs.get_shape()
+        return outputs
+
+class ADDEncoder:
     def __init__(self, params, scope):
         assert 'word_dim' in params
         initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
@@ -184,7 +249,7 @@ class AdditionEncoder:
             else:
                 return tf.cast(result, dtype)
 
-    def encode(self, input_ids, lengths, reuse=False):
+    def encode(self, input_ids, lengths):
         # with tf.variable_scope(self.scope):
         max_length = input_ids.get_shape()[1]
 
@@ -194,3 +259,13 @@ class AdditionEncoder:
             return tf.reduce_sum((tf.nn.embedding_lookup(self.embeddings, input_ids) * mask), reduction_indices=1)
         else:
             return tf.reduce_sum(tf.nn.embedding_lookup(self.embeddings, input_ids), reduction_indices=1)
+
+class PositionADDEncoder:
+    def __init__(self, params, scope):
+        assert 'word_dim' in params
+        initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+        with tf.variable_scope(scope):
+            self.embeddings = tf.get_variable('word_embedding', [params['num_word'], params['word_dim']], initializer=initializer)
+
+    def encode(self, input_ids, positions):
+        return tf.reduce_sum(tf.nn.embedding_lookup(self.embeddings, input_ids) * positions, reduction_indices=1)
