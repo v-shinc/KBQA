@@ -29,7 +29,7 @@ def fully_connected(input, hidden_layer_sizes, activations, reuse):
     return layers[-1]
 
 
-class BetaRanker:
+class BetaRankerModel:
 
     def __init__(self, params):
         assert params['hidden_layer_sizes'][-1] == 1
@@ -51,6 +51,7 @@ class BetaRanker:
                                for i in range(2)]
         self.mention_lengths = [tf.placeholder(tf.int32, [None]) for i in range(2)]
         self.topic_lengths = [tf.placeholder(tf.int32, [None]) for i in range(2)]
+
         self.extras = [tf.placeholder(tf.float32, [None, len(params['extra_keys'])])
                        for i in range(2)]
         self.dropout_keep_prob = tf.placeholder(tf.float32, name='dropout_keep_prob')
@@ -66,20 +67,20 @@ class BetaRanker:
                     relations = [relation_encoder.encode(self.relation_ids[i], self.relation_lengths[i]) for i in range(2)]
                     # patterns = [patterns[i] / tf.sqrt(tf.reduce_sum(patterns[i] ** 2, 1, keep_dims=True)) for i in range(2)]
                     # relations = [relations[i] / tf.sqrt(tf.reduce_sum(relations[i] ** 2, 1, keep_dims=True)) for i in range(2)]
-            # elif params['relation_config']['encoder'] == 'CNN':
-            #     pattern_encoder = encoder.CNNEncoder(params['pattern_config'], 'pattern_cnn')
-            #     # relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
-            #     relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
-            #     if 'char_dim' in params['question_config']:
-            #         patterns = [pattern_encoder.encode(self.pattern_char_ids[i], i == 1) for i in range(2)]
-            #     else:
-            #         patterns = [pattern_encoder.encode(self.pattern_word_ids, i == 1) for i in range(2)]
-            #     relations = [relation_encoder.encode(self.relation_ids[i], None, i == 1) for i in range(2)]
-            # elif params['relation_config']['encoder'] == 'RNN':
-            #     pattern_encoder = encoder.RNNEncoder(params['pattern_config'], 'pattern_rnn')
-            #     relation_encoder = encoder.RNNEncoder(params['relation_config'], 'relation_rnn')
-            #     patterns = [pattern_encoder.encode(self.pattern_word_ids, self.sentence_lengths, self.pattern_char_ids, self.word_lengths, i == 1) for i in range(2)]
-            #     relations = [relation_encoder.encode(self.relation_ids, None, None, None, i == 1) for i in range(2)]
+            elif params['relation_config']['encoder'] == 'CNN':
+                pattern_encoder = encoder.CNNEncoder(params['pattern_config'], 'pattern_cnn')
+                relation_encoder = encoder.CNNEncoder(params['relation_config'], 'relation_cnn')
+                # relation_encoder = encoder.ADDEncoder(params['relation_config'], 'relation_add')
+                if 'char_dim' in params['question_config']:
+                    patterns = [pattern_encoder.encode(self.pattern_char_ids[i], i == 1) for i in range(2)]
+                else:
+                    patterns = [pattern_encoder.encode(self.pattern_word_ids, i == 1) for i in range(2)]
+                relations = [relation_encoder.encode(self.relation_ids[i], i == 1) for i in range(2)]
+            elif params['relation_config']['encoder'] == 'RNN':
+                pattern_encoder = encoder.RNNEncoder(params['pattern_config'], 'pattern_rnn')
+                relation_encoder = encoder.RNNEncoder(params['relation_config'], 'relation_rnn')
+                patterns = [pattern_encoder.encode(self.pattern_word_ids, self.sentence_lengths, self.pattern_char_ids, self.word_lengths, i == 1) for i in range(2)]
+                relations = [relation_encoder.encode(self.relation_ids, None, None, None, i == 1) for i in range(2)]
             else:
                 raise ValueError('relation_encoder should be one of [CNN, ADD, RNN]')
 
@@ -109,6 +110,53 @@ class BetaRanker:
                 for i in [0, 1]:
                     features[i].append(question_type_scores[i])
 
+            # answer type VS pattern
+            # if 'answer_type_config' in params:
+            #     self.answer_type_ids = [tf.placeholder(tf.int32, [None, 3]) for i in range(2)]
+            #     self.answer_type_weights = [tf.placeholder(tf.float32, [None, 3]) for i in range(2)]
+            #     self.qword_ids = [tf.placeholder(tf.int32, [None]) for i in range(2)] # TODO: to remove this line
+            #
+            #     config_ = params['answer_type_config']
+            #     initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+            #     answer_type_embeddings = tf.get_variable('answer_type_embeddings',
+            #                                              [config_["num_answer_type"], config_['word_dim']],
+            #                                              initializer=initializer
+            #                                              )
+            #     # qword_embeddings = tf.get_variable('qword_embeddings', [config_['num_qword'], config_['dim']],
+            #     #                                    initializer=initializer)
+            #     with tf.variable_scope('answer_type_layer', regularizer=tf.contrib.layers.l2_regularizer(params['embedding_l2_scale'])):
+            #         pattern_encoder2 = encoder.ADDEncoder(config_, 'pattern_add2')
+            #     for i in range(2):
+            #         patterns2 = pattern_encoder2.encode(self.pattern_word_ids[i], self.sentence_lengths[i])
+            #         weight = tf.expand_dims(self.answer_type_weights[i], dim=2)   # [batch_size, 3, 1]
+            #
+            #         answer_type_embed = tf.reduce_sum(tf.nn.embedding_lookup(answer_type_embeddings, self.answer_type_ids[i]) * weight, 1) # [batch_size, dim]
+            #         answer_type_drops = tf.nn.dropout(answer_type_embed, self.dropout_keep_prob)
+            #         patterns_drops2 = tf.nn.dropout(patterns2, self.dropout_keep_prob)
+            #         features[i].append(tf.expand_dims(self.cosine_sim(patterns_drops2, answer_type_drops), dim=1))
+
+            # answer type VS question word
+            if 'answer_type_config' in params:
+                self.answer_type_ids = [tf.placeholder(tf.int32, [None, 3]) for i in range(2)]
+                self.answer_type_weights = [tf.placeholder(tf.float32, [None, 3]) for i in range(2)]
+                self.qword_ids = [tf.placeholder(tf.int32, [None]) for i in range(2)] # TODO: to remove this line
+
+                config_ = params['answer_type_config']
+                initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+                answer_type_embeddings = tf.get_variable('answer_type_embeddings',
+                                                         [config_["num_answer_type"], config_['word_dim']],
+                                                         initializer=initializer
+                                                         )
+                qword_embeddings = tf.get_variable('qword_embeddings', [config_['num_qword'], config_['word_dim']],
+                                                   initializer=initializer)
+                for i in range(2):
+                    weight = tf.expand_dims(self.answer_type_weights[i], dim=2)   # [batch_size, 3, 1]
+                    answer_type_embed = tf.reduce_sum(tf.nn.embedding_lookup(answer_type_embeddings, self.answer_type_ids[i]) * weight, 1)  # [batch_size, dim]
+                    answer_type_drops = tf.nn.dropout(answer_type_embed, self.dropout_keep_prob)
+
+                    qword_drops = tf.nn.dropout(tf.nn.embedding_lookup(qword_embeddings, self.qword_ids[i]), self.dropout_keep_prob)
+                    features[i].append(tf.expand_dims(self.cosine_sim(qword_drops, answer_type_drops), dim=1))
+
             # Use char-based CNN or RNN to encode mention and topic name
             if 'topic_config' in params:
                 if params['topic_config']['encoder'] == 'CNN':
@@ -117,8 +165,8 @@ class BetaRanker:
                     self.mentions = [char_encoder.encode(self.mention_char_ids[i], True) for i in range(2)]
                 elif params['topic_config']['encoder'] == 'RNN':
                     char_encoder = encoder.RNNEncoder(params['topic_config'], 'char_cnn')
-                    self.topics = [char_encoder.encode(self.topic_char_ids[i], self.topic_lengths[i], None, None, i == 1, max_pool=False) for i in range(2)]
-                    self.mentions = [char_encoder.encode(self.mention_char_ids[i], self.mention_lengths[i], None, None, True, max_pool=False) for i in range(2)]
+                    self.topics = [char_encoder.encode(self.topic_char_ids[i], self.topic_lengths[i], None, None, i == 1) for i in range(2)]
+                    self.mentions = [char_encoder.encode(self.mention_char_ids[i], self.mention_lengths[i], None, None, True) for i in range(2)]
                 else:
                     raise ValueError('topic_encoder should be one of [CNN, RNN]')
                 topics_drops = [tf.nn.dropout(self.topics[i], self.dropout_keep_prob) for i in range(2)]
@@ -193,6 +241,7 @@ class BetaRanker:
 
         self.params = params
 
+
     @staticmethod
     def cosine_sim(u, v):
         dot = tf.reduce_sum(tf.mul(u, v), 1)
@@ -219,6 +268,9 @@ class BetaRanker:
             question_lengths,
             type_ids,
             type_lengths,
+            answer_type_ids,
+            answer_type_weights,
+            qword_ids,
             extras,
             dropout_keep_prob):
         feed_dict = dict()
@@ -246,6 +298,10 @@ class BetaRanker:
                 feed_dict[self.question_lengths[i]] = question_lengths[i]
                 feed_dict[self.type_ids[i]] = type_ids[i]
                 feed_dict[self.type_lengths[i]] = type_lengths[i]
+            if 'answer_type_config' in self.params:
+                feed_dict[self.answer_type_ids[i]] = answer_type_ids[i]
+                feed_dict[self.answer_type_weights[i]] = answer_type_weights[i]
+                feed_dict[self.qword_ids[i]] = qword_ids[i]
             feed_dict[self.extras[i]] = extras[i]
 
         feed_dict[self.dropout_keep_prob] = dropout_keep_prob
@@ -268,6 +324,9 @@ class BetaRanker:
                 question_lengths,
                 type_ids,
                 type_lengths,
+                answer_type_ids,
+                answer_type_weights,
+                qword_ids,
                 extras):
         feed_dict = dict()
         if 'word_dim' in self.params['pattern_config']:
@@ -291,8 +350,13 @@ class BetaRanker:
             feed_dict[self.question_lengths[0]] = question_lengths
             feed_dict[self.type_ids[0]] = type_ids
             feed_dict[self.type_lengths[0]] = type_lengths
+        if 'answer_type_config' in self.params:
+            feed_dict[self.answer_type_ids[0]] = answer_type_ids
+            feed_dict[self.answer_type_weights[0]] = answer_type_weights
+            feed_dict[self.qword_ids[0]] = qword_ids
         feed_dict[self.extras[0]] = extras
-        return self.session.run([self.scores[0], self.pattern_relation_scores[0]], feed_dict)
+        scores, pattern_relation_scores = self.session.run([self.scores[0], self.pattern_relation_scores[0]], feed_dict)
+        return list(scores), pattern_relation_scores
     #
     # def get_question_repr(self,
     #                       question_word_ids,

@@ -5,7 +5,7 @@ import sys
 import tensorflow as tf
 from time import time
 from data_helper import DataSet
-from beta_ranker import BetaRanker
+from beta_ranker import BetaRankerModel
 from evaluate_beta_ranker import evaluate
 import config_beta_ranker
 flags = tf.flags
@@ -44,7 +44,12 @@ if __name__ == '__main__':
         config['question_config']['num_word'] = dataset.num_word
     if 'topic_config' in config:
         config['topic_config']['num_word'] = dataset.num_char  # this is char-based
-    model = BetaRanker(config)
+    if 'answer_type_config' in config:
+        config['answer_type_config']['num_answer_type'] = dataset.num_answer_type
+        config['answer_type_config']['num_qword'] = dataset.num_qword
+        config['answer_type_config']['num_word'] = dataset.num_word  # FOR ADD ENCODER
+
+    model = BetaRankerModel(config)
 
     fout_log = open(log_path, 'a')
     with open(config_path, 'w') as fout:
@@ -84,6 +89,9 @@ if __name__ == '__main__':
                 data['question_lengths'],
                 data['type_ids'],
                 data['type_lengths'],
+                data['answer_type_ids'],
+                data['answer_type_weights'],
+                data['qword_ids'],
                 data['extras'],
                 config['dropout_keep_prob']
             )

@@ -17,6 +17,7 @@ class RNNEncoder:
                 self.char_rnn_dim = params['char_rnn_dim']
                 self.char_dim = params['char_dim']
                 self.char_bidirect = params['char_bidirect']
+            self.max_pool = params['max_pool']
 
     def rnn_layer(self, embedded_seq, rnn_dim, lengths, is_bidirect):
         with tf.variable_scope('forward'):
@@ -42,7 +43,7 @@ class RNNEncoder:
         else:
             return forward_outputs, forward_state
 
-    def encode(self, word_input_ids, sentence_lengths, char_input_ids, word_lengths, reuse, max_pool=True):
+    def encode(self, word_input_ids, sentence_lengths, char_input_ids, word_lengths, reuse):
         inputs = []
         input_dim = 0
         with tf.variable_scope(self.scope, reuse=reuse):
@@ -68,11 +69,14 @@ class RNNEncoder:
             inputs = tf.concat(2, inputs)
             with tf.variable_scope('overall_rnn', reuse=reuse):
                 word_outputs, word_state = self.rnn_layer(inputs, self.word_rnn_dim, sentence_lengths, self.word_bidirect)
-                if max_pool:
+                if self.max_pool:
                     final_outputs = tf.reduce_max(word_outputs, reduction_indices=1)
                 else:
                     final_outputs = word_state
-
+                if self.word_bidirect:
+                    w = tf.get_variable('w', [self.word_rnn_dim * 2, self.word_rnn_dim], initializer=tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32))
+                    b = tf.get_variable('b', [self.word_rnn_dim], initializer=tf.constant_initializer(0))
+                    final_outputs = tf.sigmoid(tf.add(tf.matmul(final_outputs, w), b))
             return final_outputs  # or return word_state
 
 class HierarchicalCNNEncoder:

@@ -48,7 +48,7 @@ class EntityMentionTagger(object):
                 parameters['num_pos'],
                 parameters['num_tag']
             )
-        self.tag_sheme = parameters['tag_scheme']
+        self.tag_scheme = parameters['tag_scheme']
         self.use_part_of_speech = 'pos_dim' in parameters and parameters['pos_dim'] > 0
         self.dataset = DataSet(parameters)
         self.nlp_parser = NLPParser()
@@ -81,7 +81,7 @@ class EntityMentionTagger(object):
         seq_len = data['sentence_lengths'][0]
 
         words = data['words'][0][:seq_len]
-        mentions, pred_tag_sequence = self.dataset.get_mention_from_words(words, viterbi_sequence)
+        mentions, pred_tag_sequence = self.dataset.get_mention_from_words(words, viterbi_sequence)  # 'mentions' contains start index of each mention
         mention_to_likelihood = dict()
         likelihood = self.get_sequence_likelihood(data, viterbi_sequences)[0]
 
@@ -156,7 +156,7 @@ class EntityMentionTagger(object):
         data = self.dataset.create_model_input(sentence, poss)
         start = find_word(sentence, mention)
         end = start + len(mention)
-        tag_ids = self.dataset.create_tag_sequence(start, end, len(sentence), self.tag_sheme)
+        tag_ids = self.dataset.create_tag_sequence(start, end, len(sentence), self.tag_scheme)
         scores = self.model.get_likelihood(
             tag_ids,
             data['sentence_lengths'],
@@ -224,9 +224,10 @@ class EntityLinker(object):
         """
         # 需要优化： 找到所有实体及mention后， 再去统一计算mention likelihood
         res = self.entity_mention_tagger.tag(sentence)
+        print res['mentions']
         sentence = res['sentence']
         candidates = dict()
-        for surface, likelihood in res['mentions'].items():
+        for (surface, start), likelihood in res['mentions'].items():
             # print '-' * 20
             surface_ = surface.lower().replace(' ', '')
             entity_res = DBManager.get_candidate_entities(surface_, 0.1)
@@ -242,19 +243,20 @@ class EntityLinker(object):
                     candidates[mid]['mention'] = surface
                     candidates[mid]['entity_score'] = entity_score
                     candidates[mid]['mention_score'] = likelihood
+                    candidates[mid]['start'] = start
         # use ngram of
         if len(candidates) == 0:
             # print '[get_candidate_topic_entities] use ngram of tagged mention'
             # all_pos = res['pos']
-            for surface in res['mentions'].keys():
-                surface = surface.lower().split()
+            for surface, start in res['mentions'].keys():
+                surface = surface.lower().split()  # WHY lowercase
 
                 if len(surface) == 0:
                     continue
-                start = find_word(sentence.split(), surface)
+                # start = find_word(sentence.split(), surface)
                 # print sentence, surface, start
-                if start == -1:
-                    continue
+                # if start == -1:  # WHY?
+                #     continue
                 l = len(surface)
                 found = False
                 for j in range(l, 0, -1):
@@ -273,7 +275,7 @@ class EntityLinker(object):
                                 candidates[mid]['topic'] = mid
                                 candidates[mid]['mention'] = ' '.join(surface[i:i + j])
                                 candidates[mid]['entity_score'] = entity_score
-
+                                candidates[mid]['start'] = start + i
                                 _, candidates[mid]['mention_score'] = self.entity_mention_tagger.get_mention_likelihood(sentence, ' '.join(surface[i:i + j]))
                         found = len(res) > 0
         # print '[EntityLinker.get_candidate_topic_entities] conclude'

@@ -3,7 +3,7 @@ import sys
 import json
 from pipeline import Pipeline
 from utils.string_utils import naive_split
-
+import globals
 
 def compute_f1(gold_set, predict_set):
     if not isinstance(gold_set, set):
@@ -216,7 +216,12 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out, use_aqqu=False):
     qids = set()
     with open(fn_out, 'w') as fout:
         qid = 0
-
+        # Process Simple qustion
+        for fn in fn_simple_list:
+            with open(fn) as fin:
+                for line in fin:
+                    qid += 1
+                    
         # Process WEBQUESTION
         for fn in fn_wq_list:
             webq = json.load(open(fn), encoding="utf8")
@@ -239,7 +244,7 @@ def gen_query_graph(fn_wq_list, fn_simple_list, fn_out, use_aqqu=False):
                 # print question
                 # print "correct answer", gold_answers
                 query_patterns = pipeline.extract_query_pattern_and_f1(query_graphs, gold_answers)
-
+                query_patterns = pipeline.add_answer_feature(question, query_patterns)
                 # Just for statistic
                 for j in xrange(len(query_graphs)):
                     if query_graphs[j]['topic'] == data['mid1'] and query_graphs[j]['answer'] in gold_answers and \
@@ -293,6 +298,7 @@ def debug(question):
     print graph
 
 if __name__ == '__main__':
+    globals.read_configuration('../config.cfg')
     # basic_exp("../data/wq.test.complete.v2", "tmp")
 
     # Freebase is combination of fb.triple.mini and FB2M

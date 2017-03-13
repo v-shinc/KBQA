@@ -2,7 +2,7 @@ import sys
 import os
 import json
 from data_helper import DataSet
-from beta_ranker import BetaRanker
+from beta_ranker import BetaRankerModel
 
 def evaluate(dataset, model, fn_dev, fn_res):
     lno = 0
@@ -34,10 +34,12 @@ def evaluate(dataset, model, fn_dev, fn_res):
             data['question_lengths'],
             data['type_ids'],
             data['type_lengths'],
+            data['answer_type_ids'],
+            data['answer_type_weights'],
+            data['qword_ids'],
             data['extras']
         )
 
-        scores = scores.tolist()
         best_index = -100000
         best_predicted_score = -1
         for i in xrange(len(scores)):
@@ -99,7 +101,7 @@ if __name__ == '__main__':
     parameters = json.load(open(config_path))
     parameters['load_path'] = save_path
     dataset = DataSet(parameters)
-    model = BetaRanker(
+    model = BetaRankerModel(
         parameters
     )
     fn_res = os.path.join(dir_path, res_name)

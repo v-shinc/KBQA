@@ -460,7 +460,7 @@ def gen_pos_data():
     fn_pos = '../data/pos.list'
     # parser = CoreNLPParser.init_from_config()
 
-    add_pos_feature(fn_sq_train, fn_sq_train_pos+ '.tmp')
+    add_pos_feature(fn_sq_train, fn_sq_train_pos + '.tmp')
     # add_pos_feature(fn_sq_test, fn_sq_test_pos+'.tmp')
 
     # add_pos_feature(fn_wq_train, fn_wq_train_pos +'.tmp')

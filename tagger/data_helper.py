@@ -79,12 +79,14 @@ class DataSet(object):
             self.char_to_id, self.id_to_char, self.char_to_count = load_mapping_and_count(params['fn_char'])
 
         self.pos_to_id, self.id_to_pos = None, None
+        self.char_padding = -1
         if 'pos_dim' in params and params['pos_dim'] > 0:
             self.pos_to_id, self.id_to_pos = load_mapping(params['fn_pos'])
+            self.char_padding = len(self.char_to_id)
 
         self.tag_scheme_name = params['tag_scheme']
         self.tag_to_id, self.id_to_tag = load_tag_mapping(self.tag_scheme_name)
-        self.char_padding = len(self.char_to_id)
+
         self.word_padding = len(self.word_to_id)
         self.tag_padding = self.tag_to_id['END']
         self.max_word_len = params['max_word_len']
@@ -260,22 +262,27 @@ class DataSet(object):
         tag_sequence = [self.id_to_tag[t] for t in tag_sequence]
         entities = []
         entity = []
-
+        start_index = 0
         if self.tag_scheme_name == "iobes":
-            for w, t in zip(sentence, tag_sequence):
+
+            for i, (w, t) in enumerate(zip(sentence, tag_sequence)):
                 if t == 'B' or t == 'O' or t == 'END' or t == 'S':
                     if len(entity) > 0:
-                        entities.append(' '.join(entity))
+                        entities.append((' '.join(entity), start_index))
                         entity = []
                 if t == 'B' or t == 'I' or t == 'E' or t == 'S':
+                    if t == 'B' or t == 'S':
+                        start_index = i - 1  # remove 'START'
                     entity.append(w)
         else:
-            for w, t in zip(sentence, tag_sequence):
+            for i, (w, t) in enumerate(zip(sentence, tag_sequence)):
                 if t == 'B' or t == 'O' or t == 'END':
                     if len(entity) > 0:
-                        entities.append(' '.join(entity))
+                        entities.append((' '.join(entity), start_index))
                         entity = []
                 if t == 'B' or t == 'I':
+                    if t == 'B':
+                        start_index = i - 1 # remove 'START'
                     entity.append(w)
         return entities, tag_sequence
 

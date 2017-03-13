@@ -33,7 +33,7 @@ function draw_graph(nodes, links){
 
             option = {
                 title : {
-                    text: 'Freebase Subgraph',
+//                    text: 'Freebase Subgraph',
 //                    subtext: 'kbqa',
                     x:'right',
                     y:'bottom'
@@ -52,7 +52,7 @@ function draw_graph(nodes, links){
                 },
                 legend: {
                     x: 'left',
-                    data:['主题实体','匿名结点', '实体']
+                    data:['Topic Entity','CVT', 'Object']
                 },
                 series : [
                     {
@@ -61,13 +61,13 @@ function draw_graph(nodes, links){
                         ribbonType: false,
                         categories : [
                             {
-                                name: '主题实体'
+                                name: 'Topic Entity'
                             },
                             {
-                                name: '匿名结点'
+                                name: 'CVT'
                             },
                             {
-                                name:'实体'
+                                name:'Object'
                             }
                         ],
                         itemStyle: {

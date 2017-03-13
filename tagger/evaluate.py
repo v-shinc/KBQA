@@ -55,11 +55,13 @@ def evaluate(dataset, model, fn_dev, fn_res):
             y_ = data['tag_ids'][i][:seq_len]
             words = data['words'][i][:seq_len]
             gold_entities, gold_tag_sequence = dataset.get_mention_from_words(words, y_)
+            gold_entities = [e[0] for e in gold_entities]
             correct_labels += np.sum(np.equal(viterbi_sequences[i], y_))
             total_labels += seq_len
 
             viterbi_sequence_ = viterbi_sequences[i]
             pred_entities, pred_tag_sequence = dataset.get_mention_from_words(words, viterbi_sequence_)
+            pred_entities = [e[0] for e in pred_entities]
             precision, recall, f1 = compute_f1(gold_entities, pred_entities)
             avg_precision += precision
             avg_recall += recall
@@ -149,13 +151,15 @@ def evaluate_top_2(dataset, model, fn_dev, fn_res):
             if res_file:
                 tag_res = " ".join(["%s|%s|%s" % (w, p, g) for w, p, g in
                           zip(words, gold_tag_sequence, all_pred_tag_sequence[0])])
-                print >> res_file, json.dumps(
-                    {'tag_res': tag_res,
-                     'gold': "\t".join(gold_entities),
-                     'predict': "\t".join(all_pred_entities),
-                     'entity': data['entities'][i],
-                     'pos': dataset.pos_ids_to_words(data['pos_ids'][i][:seq_len])
-                     }, encoding='utf8',)
+                result = {
+                    'tag_res': tag_res,
+                    'gold': "\t".join(gold_entities),
+                    'predict': "\t".join(all_pred_entities),
+                    'entity': data['entities'][i]
+                }
+                if 'pos_ids' in data:
+                    result['pos'] = dataset.pos_ids_to_words(data['pos_ids'][i][:seq_len])
+                print >> res_file, json.dumps(result, ensure_ascii=False).encode('utf8')
 
     accuracy = 100 * correct_labels / float(total_labels)
     avg_f1 /= num
@@ -207,4 +211,4 @@ if __name__ == '__main__':
         parameters['num_tag']
     )
     fn_res = os.path.join(dir_path, res_name)
-    evaluate_top_2(dataset, model, fn_dev, fn_res)
+    evaluate(dataset, model, fn_dev, fn_res)

@@ -13,7 +13,7 @@ class RelationMatcherModel:
         self.pattern_positions = tf.placeholder(tf.float32, [None, params['max_sentence_len'], params['question_config']['word_dim']])
         self.relation_positions = tf.placeholder(tf.float32, [None, 3, params['relation_config']['word_dim']])
 
-        with tf.device('/gpu:%s' % params.get('gpu', 1)):
+        with tf.device('/gpu:%s' % params.get('gpu', 0)):
             if params['encode_name'] == 'CNN':
                 question_encoder = CNNEncoder(params['question_config'], 'question_cnn')
                 relation_encoder = CNNEncoder(params['relation_config'], 'relation_cnn')
@@ -24,6 +24,9 @@ class RelationMatcherModel:
                     question = question_encoder.encode(self.q_word_ids)
                 pos_relation = relation_encoder.encode(self.pos_relation_ids, False)
                 neg_relation = relation_encoder.encode(self.neg_relation_ids, True)
+                question = question / tf.sqrt(tf.reduce_sum(question ** 2, 1, keep_dims=True))
+                pos_relation = pos_relation / tf.sqrt(tf.reduce_sum(pos_relation ** 2, 1, keep_dims=True))
+                neg_relation = neg_relation / tf.sqrt(tf.reduce_sum(neg_relation ** 2, 1, keep_dims=True))
 
             elif params['encode_name'] == 'ADD':
                 if params['question_config'].get("use_position", False):
@@ -32,6 +35,7 @@ class RelationMatcherModel:
                 else:
                     question_encoder = ADDEncoder(params['question_config'], "question_add")
                     question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths)
+                    question = question / tf.sqrt(tf.reduce_sum(question ** 2, 1, keep_dims=True))
 
                 if params['relation_config'].get("use_position", False):
                     relation_encoder = PositionADDEncoder(params['relation_config'], 'relation_add')
@@ -41,6 +45,10 @@ class RelationMatcherModel:
                     relation_encoder = ADDEncoder(params['relation_config'], 'relation_add')
                     pos_relation = relation_encoder.encode(self.pos_relation_ids, None)
                     neg_relation = relation_encoder.encode(self.neg_relation_ids, None)
+                    pos_relation = pos_relation / tf.sqrt(tf.reduce_sum(pos_relation ** 2, 1, keep_dims=True))
+                    neg_relation = neg_relation / tf.sqrt(tf.reduce_sum(neg_relation ** 2, 1, keep_dims=True))
+
+
 
             elif params['encode_name'] == 'RNN':
                 question_encoder = RNNEncoder(params['question_config'], 'question_rnn')
@@ -49,6 +57,10 @@ class RelationMatcherModel:
                 question = question_encoder.encode(self.q_word_ids, self.q_sentence_lengths, self.q_char_ids, self.q_word_lengths, False)
                 pos_relation = relation_encoder.encode(self.pos_relation_ids, None, None, None, False)
                 neg_relation = relation_encoder.encode(self.neg_relation_ids, None, None, None, True)
+                # question = question / tf.sqrt(tf.reduce_sum(question ** 2, 1, keep_dims=True))
+                # pos_relation = pos_relation / tf.sqrt(tf.reduce_sum(pos_relation ** 2, 1, keep_dims=True))
+                # neg_relation = neg_relation / tf.sqrt(tf.reduce_sum(neg_relation ** 2, 1, keep_dims=True))
+
                 # pos_relation = relation_encoder.encode(self.pos_relation_ids, None, False)
                 # neg_relation = relation_encoder.encode(self.neg_relation_ids, None, True)
             else:
@@ -57,8 +69,8 @@ class RelationMatcherModel:
             self.question_drop = tf.nn.dropout(question, self.dropout_keep_prob)
             self.pos_relation_drop = tf.nn.dropout(pos_relation, self.dropout_keep_prob)
             self.neg_relation_drop = tf.nn.dropout(neg_relation, self.dropout_keep_prob)
-            self.pos_sim = self.sim(self.question_drop, self.pos_relation_drop)
-            self.neg_sim = self.sim(self.question_drop, self.neg_relation_drop)
+            self.pos_sim = self.dot_sim(self.question_drop, self.pos_relation_drop)
+            self.neg_sim = self.dot_sim(self.question_drop, self.neg_relation_drop)
             self.loss = tf.reduce_mean(tf.maximum(0., self.neg_sim + params['margin'] - self.pos_sim))
             tvars = tf.trainable_variables()
             max_grad_norm = 2
@@ -80,7 +92,11 @@ class RelationMatcherModel:
         self.params = params
 
     @staticmethod
-    def sim(u, v):
+    def dot_sim(u, v):
+        return tf.reduce_sum(tf.mul(u, v), 1)
+
+    @staticmethod
+    def cosine_sim(u, v):
         dot = tf.reduce_sum(tf.mul(u, v), 1)
         sqrt_u = tf.sqrt(tf.reduce_sum(u ** 2, 1))
         sqrt_v = tf.sqrt(tf.reduce_sum(v ** 2, 1))

@@ -8,11 +8,21 @@ class DBManager(object):
     name_db = None
     alias_db = None
     notable_type_db = None
+    notable_for_db = None
     type_db = None
     entity_surface_db = None
     freebase_db = None
     mediator_relations = None
     mediator_nodes = None
+
+    @staticmethod
+    def get_description(mid):
+        if not DBManager.description_db:
+            DBManager.description_db = leveldb.LevelDB(globals.config.get('LevelDB', 'description_db'))
+        try:
+            return DBManager.description_db.Get(mid)
+        except KeyError:
+            return "No description!"
 
     @staticmethod
     def get_notable_type(mid):
@@ -25,10 +35,32 @@ class DBManager(object):
             return []
 
     @staticmethod
+    def get_notable_for(mid):
+        if not DBManager.notable_for_db:
+            DBManager.notable_for_db = leveldb.LevelDB(globals.config.get('LevelDB', 'notable_for_db'))
+        try:
+            notable_for = DBManager.notable_for_db.Get(mid)
+            return notable_for.split('\t')
+        except KeyError:
+            return []
+
+    @staticmethod
+    def get_type(mid):
+        if not DBManager.type_db:
+            DBManager.type_db = leveldb.LevelDB(globals.config.get('LevelDB', 'type_db'))
+        try:
+            types = DBManager.type_db.Get(mid)
+            return types.split('\t')
+        except KeyError:
+            return []
+
+    @staticmethod
     def get_name(mid):
         if not DBManager.name_db:
             DBManager.name_db = leveldb.LevelDB(globals.config.get('LevelDB', 'name_db'))
         try:
+            if not mid.startswith('m.'):
+                return None, "key error"
             name = DBManager.name_db.Get(mid)
             return name.decode('utf8'), "success"
         except KeyError:
@@ -82,6 +114,25 @@ class DBManager(object):
 
         except KeyError:
             return []
+
+    @staticmethod
+    def get_one_hop_path_as_dict(subject):
+        if not DBManager.freebase_db:
+            DBManager.freebase_db = leveldb.LevelDB(globals.config.get('LevelDB', 'freebase_db'))
+        try:
+            values = DBManager.freebase_db.Get(subject.encode('utf8')).decode('utf8')
+
+            values = values.split('\t')
+            ret = dict()
+            for value in values:  # value is "rel obj1 obj2 ..."
+                value = value.split()
+                rel = value[0]
+                objs = value[1:]
+                ret[rel] = objs
+            return ret
+
+        except KeyError:
+            return None
 
     # @staticmethod
     # def get_one_hop_relation(subject):
@@ -141,6 +192,26 @@ class DBManager(object):
             else:
                 ret.append([first_hop[i]])
         return ret
+    @staticmethod
+    def get_subgraph_as_dict(subject):
+        if not DBManager.freebase_db:
+            DBManager.freebase_db = leveldb.LevelDB(globals.config.get('LevelDB', 'freebase_db'))
+        first_hop = DBManager.get_one_hop_path_as_dict(subject)  # first_hop is a dict
+        if not first_hop:
+            return dict()
+        new_sugraph = dict()
+        for r in first_hop.keys():
+
+            if DBManager.is_mediator_relation(r):
+                for i, cvt in enumerate(first_hop[r]):
+                    detail_dict = DBManager.get_one_hop_path_as_dict(cvt) # use detail dictionary to replace cvt node
+                    if detail_dict:
+                        if r not in new_sugraph:
+                            new_sugraph[r] = list(:w)
+                        new_sugraph[r].append(detail_dict)
+            else:
+                new_sugraph[r] = first_hop[r]
+        return new_sugraph
 
     @staticmethod
     def get_multiple_hop_relations(subject):
@@ -194,7 +265,7 @@ class DBManager(object):
         return ret
 
     @staticmethod
-    def get_object(path, constraints):
+    def get_object(path, constraints):  #TODO
         subject = path[0]
 
         if not DBManager.freebase_db:
@@ -214,6 +285,27 @@ class DBManager(object):
             elif r1 == path[1]:
                 ret.add(first_hop[i][2])
         return ret
+
+    @staticmethod
+    def get_property(subject, relation_name):
+        # get property of given subject, for instance, get "gender" property
+        if not DBManager.freebase_db:
+            DBManager.freebase_db = leveldb.LevelDB(globals.config.get('LevelDB', 'freebase_db'))
+
+        try:
+            values = DBManager.freebase_db.Get(subject.encode('utf8')).decode('utf8')
+
+            values = values.split('\t')
+            ret = []
+            for value in values:
+                value = value.split()
+                if value[0].split('.')[-1] == relation_name:
+                    for v in value[1:]:
+                        ret.append([subject, value[0], v])
+            return ret
+
+        except KeyError:
+            return []
 
 if __name__ == '__main__':
     globals.read_configuration('../config.cfg')

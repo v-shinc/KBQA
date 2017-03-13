@@ -56,6 +56,13 @@ class DataSet:
         self.id_to_char[index] = ' '
         self.char_padding = len(self.char_to_id)
 
+        if 'answer_type_config' in params:
+            qwords = ['what', 'who', 'when', 'which', 'where', 'how', 'none']
+            self.qword_to_id = dict(zip(qwords, range(len(qwords))))
+            self.id_to_qword = dict(zip(range(len(qwords)), qwords))
+            self.answer_type_to_id, self.id_to_answer_type = load_mapping(params['fn_answer_type'])
+            self.answer_type_padding = len(self.answer_type_to_id)
+
         if 'type_config' in params:
             self.type_to_id, self.id_to_type = load_mapping(params['fn_type'])
             self.type_padding = len(self.type_to_id)
@@ -105,6 +112,14 @@ class DataSet:
     def num_type(self):
         return len(self.type_to_id) + 1
 
+    @property
+    def num_answer_type(self):
+        return len(self.answer_type_to_id) + 1
+
+    @property
+    def num_qword(self):
+        return len(self.qword_to_id)
+
     def _parse(self, data):
         parsed = dict()
         # mention VS topic name
@@ -118,6 +133,8 @@ class DataSet:
 
         # pattern VS relation
         if self.word_based:
+            if 'pattern' not in data:
+                print data
             parsed['pattern_word_ids'] = [self.word_to_id.get(w if w in self.word_to_id else '<UNK>') for w in data['pattern'].split()]
 
         if self.char_based:
@@ -132,7 +149,8 @@ class DataSet:
         # question VS type
         if 'type_config' in self.params:
             parsed['question_word_ids'] = [self.word_to_id.get(w if w in self.word_to_id else '<UNK>') for w in data['question'].split()]
-            parsed['type_ids'] = [self.type_to_id.get(t) for t in data['topic_type']]
+            # TODO: only consider common type
+            parsed['type_ids'] = [self.type_to_id.get(t) for t in data['topic_notable_type']]
             if len(parsed['type_ids']) == 0:
                 parsed['type_ids'] = [self.type_padding]
         # relation is cast-actor or place_of_birth
@@ -148,11 +166,81 @@ class DataSet:
 
         parsed['relation_ids'] = relation_ids
 
+        # question word VS answer type
+        if 'answer_type_config' in self.params:
+            parsed['answer_type_ids'] = []
+            parsed['answer_type_weights'] = []
+            for t, w in data['answer_types'].items():
+                parsed['answer_type_ids'].append(self.answer_type_to_id[t])
+                parsed['answer_type_weights'].append(w)
+            parsed['qword_ids'] = self.qword_to_id[data['qword']]
+
         # Extra feature
-        extra_features = [float(data.get(k, 0)) for k in self.params['extra_keys']]
+        extra_features = [float(data.get(k, 0.)) for k in self.params['extra_keys']]
         parsed['extra'] = extra_features
-        parsed['f1'] = data['f1']
+        if 'f1' in data:
+            parsed['f1'] = data['f1']
         return parsed
+
+    def create_model_input(self, quereis):
+        ret = {
+            "pattern_word_ids": [],
+            "sentence_lengths": [],
+            "relation_ids": [],
+            "relation_lengths": [],
+            "mention_char_ids": [],
+            "topic_char_ids": [],
+            "mention_lengths": [],
+            "topic_lengths": [],
+            "question_word_ids": [],
+            "question_lengths": [],
+            "type_ids": [],
+            "type_lengths": [],
+            "answer_type_ids": [],
+            "answer_type_weights": [],
+            "qword_ids": [],
+            "extras": [],
+            "pattern_words": [],
+            "paths": [],
+            "mentions": [],
+            'hash': [],
+            "question": ""
+        }
+        for data in quereis:
+            parsed = self._parse(data)
+            if not parsed:
+                continue
+            ret['sentence_lengths'].append(len(parsed['pattern_word_ids']))
+            ret['pattern_word_ids'].append(
+                self.pad_words(parsed['pattern_word_ids'], self.max_pattern_len, self.word_padding))
+            ret['relation_lengths'].append(len(parsed['relation_ids']))
+            ret['relation_ids'].append(self.pad_words(parsed['relation_ids'], 2, self.sub_relation_padding))
+            if "type_config" in self.params:
+                ret['question_lengths'].append(len(parsed['question_word_ids']))
+                ret['question_word_ids'].append(
+                    self.pad_words(parsed['question_word_ids'], self.max_question_len, self.word_padding))
+                ret['type_lengths'].append(len(parsed['type_ids']))
+                ret['type_ids'].append(self.pad_words(parsed['type_ids'], self.max_type_len, self.type_padding))
+            if "topic_config" in self.params:
+                ret['mention_char_ids'].append(
+                    self.pad_words(parsed['mention_char_ids'], self.max_name_len, self.char_padding))
+                ret['topic_char_ids'].append(
+                    self.pad_words(parsed['topic_char_ids'], self.max_name_len, self.char_padding))
+                ret['mention_lengths'].append(len(parsed['mention_char_ids']))
+                ret['topic_lengths'].append(len(parsed['topic_char_ids']))
+            if 'answer_type_config' in self.params:
+                ret['answer_type_ids'].append(self.pad_words(parsed['answer_type_ids'], 3, self.answer_type_padding))
+                ret['answer_type_weights'].append(self.pad_words(parsed['answer_type_weight'], 3, 0.))
+                ret['qword_ids'].append(parsed['qword_ids'])
+            ret['extras'].append(parsed['extra'])
+            ret['hash'].append( data['hash'])
+            ret['pattern_words'].append(data['pattern'])
+            ret['paths'].append(data['path'])
+            ret['mentions'].append(data['mention'])
+
+        for k, v in ret.items():
+            ret[k] = np.array(v)
+        return ret
 
     def test_iterator(self, fn_test):
         qid = -1
@@ -169,6 +257,9 @@ class DataSet:
             "question_lengths": [],
             "type_ids": [],
             "type_lengths": [],
+            "answer_type_ids": [],
+            "answer_type_weights": [],
+            "qword_ids": [],
             "extras": [],
             "f1": [],
             "pattern_words": [],
@@ -208,6 +299,11 @@ class DataSet:
                     ret['topic_char_ids'].append(self.pad_words(parsed['topic_char_ids'], self.max_name_len, self.char_padding))
                     ret['mention_lengths'].append(len(parsed['mention_char_ids']))
                     ret['topic_lengths'].append(len(parsed['topic_char_ids']))
+                if 'answer_type_config' in self.params:
+                    ret['answer_type_ids'].append(
+                        self.pad_words(parsed['answer_type_ids'], 3, self.answer_type_padding))
+                    ret['answer_type_weights'].append(self.pad_words(parsed['answer_type_weights'], 3, 0.))
+                    ret['qword_ids'].append(parsed['qword_ids'])
                 ret['extras'].append(parsed['extra'])
                 ret['f1'].append(parsed['f1'])
                 ret['pattern_words'].append(data['pattern'])
@@ -235,6 +331,9 @@ class DataSet:
         all_question_lengths = [[], []]
         all_type_ids = [[], []]
         all_type_lengths = [[], []]
+        all_answer_type_ids = [[], []]
+        all_answer_type_weights = [[], []]
+        all_qword_ids = [[], []]
         all_extras = [[], []]
 
         def wrap(pair):
@@ -258,6 +357,12 @@ class DataSet:
                     all_type_ids[i].append(self.pad_words(pair[i]['type_ids'], self.max_type_len, self.type_padding))
                 all_extras[i].append(pair[i]['extra'])
 
+                if 'answer_type_config' in self.params:
+                    all_answer_type_ids[i].append(
+                        self.pad_words(pair[i]['answer_type_ids'], 3, self.answer_type_padding))
+                    all_answer_type_weights[i].append(self.pad_words(pair[i]['answer_type_weights'], 3, 0.))
+                    all_qword_ids[i].append(pair[i]['qword_ids'])
+
         for _ in xrange(num_batch):
             all_pattern_word_ids = [[], []]
             all_sentence_lengths = [[], []]
@@ -271,6 +376,9 @@ class DataSet:
             all_question_lengths = [[], []]
             all_type_ids = [[], []]
             all_type_lengths = [[], []]
+            all_answer_type_ids = [[], []]
+            all_answer_type_weights = [[], []]
+            all_qword_ids = [[], []]
             all_extras = [[], []]
             num_diff_question = 0
             while num_diff_question < batch_size:
@@ -282,8 +390,8 @@ class DataSet:
                 index += 1
 
                 pairs = []
-                if len(self.qid_to_rank[qid]) < 2:
-                    print 'len(qid_to_rank[{}])'.format(qid), "< 2"
+                # if len(self.qid_to_rank[qid]) < 2:
+                #     print 'len(qid_to_rank[{}])'.format(qid), "< 2"
 
                 for i in xrange(len(self.qid_to_rank[qid])):
                     for j in xrange(i+1, len(self.qid_to_rank[qid])):
@@ -314,6 +422,9 @@ class DataSet:
                 "question_lengths": all_question_lengths,
                 "type_ids": all_type_ids,
                 "type_lengths": all_type_lengths,
+                "answer_type_ids": all_answer_type_ids,
+                "answer_type_weights": all_answer_type_weights,
+                "qword_ids": all_qword_ids,
                 "extras": all_extras,
             }
             for k, v in ret.items():
